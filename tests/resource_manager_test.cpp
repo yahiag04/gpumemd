@@ -1,0 +1,134 @@
+#include "gpumemd/resource_manager.hpp"
+
+#include <cassert>
+#include <cstdint>
+#include <limits>
+#include <latch>
+#include <string>
+#include <stdexcept>
+#include <thread>
+#include <vector>
+
+using gpumemd::Bytes;
+using gpumemd::ErrorCode;
+using gpumemd::ResourceManager;
+
+void constructor_rejects_zero_capacity() {
+    bool rejected = false;
+    try {
+        ResourceManager manager(0);
+        (void)manager;
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    assert(rejected);
+}
+
+void acquire_release_and_status_are_consistent() {
+    ResourceManager manager(10'000);
+
+    auto acquired = manager.acquire("processB", 3'000);
+    assert(acquired.ok());
+    assert(acquired.amount == 3'000);
+
+    acquired = manager.acquire("processA", 2'000);
+    assert(acquired.ok());
+
+    auto snapshot = manager.status();
+    assert(snapshot.capacity == 10'000);
+    assert(snapshot.used == 5'000);
+    assert(snapshot.free == 5'000);
+    assert(snapshot.reservations.size() == 2);
+    assert(snapshot.reservations[0].name == "processA");
+    assert(snapshot.reservations[1].name == "processB");
+    Bytes reservation_sum = 0;
+    for (const auto& reservation : snapshot.reservations) {
+        reservation_sum += reservation.bytes;
+    }
+    assert(reservation_sum == snapshot.used);
+
+    auto released = manager.release("processB");
+    assert(released.ok());
+    assert(released.amount == 3'000);
+    snapshot = manager.status();
+    assert(snapshot.used == 2'000);
+    assert(snapshot.free == 8'000);
+}
+
+void failed_operations_do_not_change_state() {
+    ResourceManager manager(100);
+    assert(manager.acquire("owner", 75).ok());
+    const auto before = manager.status();
+
+    auto result = manager.acquire("owner", 1);
+    assert(!result.ok() && result.error == ErrorCode::DuplicateClient);
+    result = manager.acquire("other", 26);
+    assert(!result.ok() && result.error == ErrorCode::InsufficientMemory);
+    result = manager.acquire("zero", 0);
+    assert(!result.ok() && result.error == ErrorCode::InvalidSize);
+    result = manager.release("missing");
+    assert(!result.ok() && result.error == ErrorCode::UnknownClient);
+    result = manager.acquire("bad/name", 1);
+    assert(!result.ok() && result.error == ErrorCode::InvalidName);
+    result = manager.acquire(std::string(65, 'x'), 1);
+    assert(!result.ok() && result.error == ErrorCode::InvalidName);
+
+    const auto after = manager.status();
+    assert(after.capacity == before.capacity);
+    assert(after.used == before.used);
+    assert(after.free == before.free);
+    assert(after.reservations.size() == before.reservations.size());
+    assert(after.reservations[0].name == before.reservations[0].name);
+    assert(after.reservations[0].bytes == before.reservations[0].bytes);
+}
+
+void boundary_capacity_is_overflow_safe() {
+    ResourceManager manager(std::numeric_limits<Bytes>::max());
+    assert(manager.acquire("max", std::numeric_limits<Bytes>::max()).ok());
+    auto result = manager.acquire("extra", 1);
+    assert(!result.ok() && result.error == ErrorCode::InsufficientMemory);
+    const auto snapshot = manager.status();
+    assert(snapshot.used == std::numeric_limits<Bytes>::max());
+    assert(snapshot.free == 0);
+}
+
+void concurrent_acquire_and_release_preserve_accounting() {
+    constexpr int thread_count = 8;
+    constexpr int operations = 200;
+    ResourceManager manager(thread_count);
+    std::latch start(thread_count);
+    std::vector<std::thread> workers;
+    workers.reserve(thread_count);
+
+    for (int thread = 0; thread < thread_count; ++thread) {
+        workers.emplace_back([&, thread] {
+            start.count_down();
+            start.wait();
+            for (int operation = 0; operation < operations; ++operation) {
+                const std::string name = "worker_" + std::to_string(thread) + "_" +
+                                         std::to_string(operation);
+                assert(manager.acquire(name, 1).ok());
+                const auto snapshot = manager.status();
+                assert(snapshot.used <= snapshot.capacity);
+                assert(snapshot.used + snapshot.free == snapshot.capacity);
+                assert(manager.release(name).ok());
+            }
+        });
+    }
+
+    for (auto& worker : workers) {
+        worker.join();
+    }
+    const auto snapshot = manager.status();
+    assert(snapshot.used == 0);
+    assert(snapshot.free == snapshot.capacity);
+    assert(snapshot.reservations.empty());
+}
+
+int main() {
+    constructor_rejects_zero_capacity();
+    acquire_release_and_status_are_consistent();
+    failed_operations_do_not_change_state();
+    boundary_capacity_is_overflow_safe();
+    concurrent_acquire_and_release_preserve_accounting();
+}
