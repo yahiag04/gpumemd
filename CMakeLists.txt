@@ -74,4 +74,12 @@ if(BUILD_TESTING)
         )
         set_tests_properties(cli_${scenario} PROPERTIES TIMEOUT 5)
     endforeach()
+
+    add_test(NAME cli_client_help
+        COMMAND "${CMAKE_COMMAND}"
+            "-DGPUMEMCTL=$<TARGET_FILE:gpumemctl>"
+            -DSCENARIO=client_help
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_smoke.cmake"
+    )
+    set_tests_properties(cli_client_help PROPERTIES TIMEOUT 5)
 endif()

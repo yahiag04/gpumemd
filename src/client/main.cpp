@@ -14,7 +14,8 @@ namespace {
 
 void print_usage(std::ostream& output) {
     output << "Usage: gpumemctl --socket PATH COMMAND [ARGUMENTS...]\n\n"
-              "Commands: acquire NAME SIZE, release NAME, status\n";
+              "Commands: acquire NAME SIZE [PRIORITY] [TIMEOUT_MS],\n"
+              "          try_acquire NAME SIZE, release NAME, status\n";
 }
 
 bool write_all(int fd, std::string_view data) {

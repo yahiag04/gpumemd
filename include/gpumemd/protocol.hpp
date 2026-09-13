@@ -15,6 +15,11 @@ enum class CommandType {
     Status,
 };
 
+enum class AcquireMode {
+    Wait,
+    Try,
+};
+
 enum class ParseError {
     None,
     InvalidRequest,
@@ -26,6 +31,8 @@ struct Command {
     CommandType type{CommandType::Status};
     std::string name;
     Bytes bytes{0};
+    AcquireMode acquire_mode{AcquireMode::Wait};
+    AcquireOptions options{};
 };
 
 struct ParseResult {

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -13,6 +14,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 namespace gpumemd {
@@ -24,6 +26,8 @@ struct Client {
     int fd;
     std::string input;
 };
+
+bool process_input(Client& client, ResourceManager& manager);
 
 bool send_all(int fd, const std::string& response) noexcept {
     std::size_t sent = 0;
@@ -43,8 +47,13 @@ bool send_all(int fd, const std::string& response) noexcept {
 std::string dispatch(ResourceManager& manager, const Command& command) {
     switch (command.type) {
     case CommandType::Acquire:
+        if (command.acquire_mode == AcquireMode::Try) {
+            return format_operation_result("acquired", command.name,
+                                           manager.try_acquire(command.name, command.bytes));
+        }
         return format_operation_result("acquired", command.name,
-                                       manager.acquire(command.name, command.bytes));
+                                       manager.acquire(command.name, command.bytes,
+                                                       command.options));
     case CommandType::Release:
         return format_operation_result("released", command.name,
                                        manager.release(command.name));
@@ -52,6 +61,33 @@ std::string dispatch(ResourceManager& manager, const Command& command) {
         return format_status(manager.status());
     }
     return "ERR internal_error unknown command type\n";
+}
+
+void client_session(int fd, ResourceManager& manager,
+                    const std::atomic<bool>& stop_requested) {
+    timeval timeout{0, 100'000};
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    Client client{fd, {}};
+    char buffer[4096];
+    while (!stop_requested.load(std::memory_order_relaxed)) {
+        const ssize_t count = read(fd, buffer, sizeof(buffer));
+        if (count > 0) {
+            client.input.append(buffer, static_cast<std::size_t>(count));
+            if (!process_input(client, manager)) {
+                break;
+            }
+        } else if (count == 0) {
+            if (!client.input.empty()) {
+                send_all(fd, "ERR invalid_request unterminated command\n");
+            }
+            break;
+        } else if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+            continue;
+        } else {
+            break;
+        }
+    }
+    close(fd);
 }
 
 bool process_input(Client& client, ResourceManager& manager) {
@@ -142,21 +178,15 @@ int UnixSocketServer::run(const std::function<bool()>& external_stop) {
         return -1;
     }
 
-    std::vector<Client> clients;
+    std::vector<std::thread> workers;
     while (!stop_requested_.load(std::memory_order_relaxed)) {
         if (external_stop && external_stop()) {
             request_shutdown();
             break;
         }
 
-        std::vector<pollfd> poll_fds;
-        poll_fds.reserve(clients.size() + 1);
-        poll_fds.push_back({listen_fd_, POLLIN, 0});
-        for (const Client& client : clients) {
-            poll_fds.push_back({client.fd, POLLIN, 0});
-        }
-
-        const int ready = poll(poll_fds.data(), static_cast<nfds_t>(poll_fds.size()), 100);
+        pollfd listener{listen_fd_, POLLIN, 0};
+        const int ready = poll(&listener, 1, 100);
         if (ready < 0) {
             if (errno == EINTR) {
                 continue;
@@ -167,53 +197,21 @@ int UnixSocketServer::run(const std::function<bool()>& external_stop) {
             continue;
         }
 
-        if (poll_fds[0].revents & POLLIN) {
+        if (listener.revents & POLLIN) {
             const int client_fd = accept(listen_fd_, nullptr, nullptr);
             if (client_fd >= 0) {
-                clients.push_back({client_fd, {}});
-            }
-        }
-
-        const std::size_t polled_client_count = poll_fds.size() - 1;
-        for (std::size_t index = polled_client_count; index-- > 0;) {
-            const short events = poll_fds[index + 1].revents;
-            if (events == 0) {
-                continue;
-            }
-
-            bool keep = (events & POLLIN) != 0;
-            if (keep) {
-                char buffer[4096];
-                const ssize_t count = read(clients[index].fd, buffer, sizeof(buffer));
-                if (count > 0) {
-                    clients[index].input.append(buffer, static_cast<std::size_t>(count));
-                    keep = process_input(clients[index], manager_);
-                } else if (count == 0) {
-                    if (!clients[index].input.empty()) {
-                        send_all(clients[index].fd,
-                                 "ERR invalid_request unterminated command\n");
-                    }
-                    keep = false;
-                } else if (errno != EINTR) {
-                    keep = false;
-                }
-            } else {
-                keep = false;
-            }
-
-            if (!keep || (events & (POLLHUP | POLLERR | POLLNVAL))) {
-                close(clients[index].fd);
-                clients.erase(clients.begin() + static_cast<std::ptrdiff_t>(index));
+                workers.emplace_back(client_session, client_fd, std::ref(manager_),
+                                     std::cref(stop_requested_));
             }
         }
     }
 
-    for (const Client& client : clients) {
-        close(client.fd);
-    }
-    clients.clear();
     close(listen_fd_);
     listen_fd_ = -1;
+    manager_.cancel_waiters();
+    for (auto& worker : workers) {
+        worker.join();
+    }
     unlink(socket_path_.c_str());
     return 0;
 }
