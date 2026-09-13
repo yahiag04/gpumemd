@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <poll.h>
 #include <string>
 #include <thread>
 
@@ -54,6 +55,21 @@ std::string request(int fd, const std::string& command, bool multiline = false) 
     }
 }
 
+std::string request_with_timeout(int fd, const std::string& command, int timeout_ms) {
+    const std::string wire = command + "\n";
+    assert(write(fd, wire.data(), wire.size()) == static_cast<ssize_t>(wire.size()));
+    pollfd ready{fd, POLLIN, 0};
+    if (poll(&ready, 1, timeout_ms) <= 0) {
+        return {};
+    }
+    char buffer[256];
+    const ssize_t count = read(fd, buffer, sizeof(buffer));
+    if (count <= 0) {
+        return {};
+    }
+    return {buffer, static_cast<std::size_t>(count)};
+}
+
 } // namespace
 
 void serves_multiple_clients_and_preserves_state() {
@@ -100,7 +116,7 @@ void reports_parse_and_accounting_errors() {
     assert(request(client, "acquire owner 75B") == "OK acquired owner 75\n");
     assert(request(client, "acquire owner 1B") ==
            "ERR duplicate_client client already has a reservation\n");
-    assert(request(client, "acquire other 26B") ==
+    assert(request(client, "try_acquire other 26B") ==
            "ERR insufficient_memory requested bytes exceed available capacity\n");
     assert(request(client, "bad-command") ==
            "ERR invalid_request invalid command syntax\n");
@@ -111,7 +127,38 @@ void reports_parse_and_accounting_errors() {
     assert(access(path.c_str(), F_OK) != 0);
 }
 
+void blocked_acquire_does_not_stop_other_clients() {
+    const std::string path = socket_path();
+    unlink(path.c_str());
+    gpumemd::ResourceManager manager(100);
+    gpumemd::UnixSocketServer server(manager, path);
+    std::thread server_thread([&] { server.run(); });
+
+    const int blocker = connect_to(path);
+    assert(request(blocker, "acquire blocker 100B") == "OK acquired blocker 100\n");
+    const int waiting = connect_to(path);
+    std::string waiting_response;
+    std::thread waiting_thread([&] {
+        waiting_response = request(waiting, "acquire waiter 50B 0 2000");
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    const int releaser = connect_to(path);
+    assert(request_with_timeout(releaser, "release blocker", 500) ==
+           "OK released blocker 100\n");
+    close(releaser);
+    waiting_thread.join();
+    assert(waiting_response == "OK acquired waiter 50\n");
+    close(waiting);
+    close(blocker);
+
+    server.request_shutdown();
+    server_thread.join();
+    assert(access(path.c_str(), F_OK) != 0);
+}
+
 int main() {
     serves_multiple_clients_and_preserves_state();
     reports_parse_and_accounting_errors();
+    blocked_acquire_does_not_stop_other_clients();
 }

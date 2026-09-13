@@ -1,5 +1,11 @@
 # Verify public CLI behavior without a third-party test dependency.
-if(SCENARIO STREQUAL "help")
+if(SCENARIO STREQUAL "client_help")
+    set(program "${GPUMEMCTL}")
+    set(arguments --help)
+    set(expected_result 0)
+    set(expected_output "Usage: gpumemctl")
+elseif(SCENARIO STREQUAL "help")
+    set(program "${GPUMEMD}")
     set(arguments --help)
     set(expected_result 0)
     set(expected_output "Usage: gpumemd --memory SIZE")
@@ -15,8 +21,12 @@ else()
     message(FATAL_ERROR "Unknown CLI test scenario: ${SCENARIO}")
 endif()
 
+if(NOT program)
+    set(program "${GPUMEMD}")
+endif()
+
 execute_process(
-    COMMAND "${GPUMEMD}" ${arguments}
+    COMMAND "${program}" ${arguments}
     RESULT_VARIABLE actual_result
     OUTPUT_VARIABLE stdout
     ERROR_VARIABLE stderr
