@@ -76,6 +76,15 @@ if(BUILD_TESTING)
     add_test(NAME server COMMAND server_test)
     set_tests_properties(server PROPERTIES TIMEOUT 10)
 
+    add_executable(cli_framing_test tests/cli_framing_test.cpp)
+    target_link_libraries(cli_framing_test PRIVATE Threads::Threads)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(cli_framing_test PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME cli_framing
+        COMMAND cli_framing_test $<TARGET_FILE:gpumemctl>)
+    set_tests_properties(cli_framing PROPERTIES TIMEOUT 10)
+
     foreach(scenario IN ITEMS help no_arguments unsupported_arguments)
         add_test(NAME cli_${scenario}
             COMMAND "${CMAKE_COMMAND}"
