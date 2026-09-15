@@ -169,6 +169,16 @@ void invalid_timeout_is_rejected() {
     assert(!result.ok() && result.error == ErrorCode::InvalidTimeout);
 }
 
+void oversized_infinite_acquire_fails_immediately() {
+    ResourceManager manager(100);
+    const auto start = std::chrono::steady_clock::now();
+    const auto result = manager.acquire("impossible", 101);
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+    assert(!result.ok() && result.error == ErrorCode::InsufficientMemory);
+    assert(elapsed < 200ms);
+    assert(manager.status().used == 0);
+}
+
 void priority_and_fifo_order_waiters() {
     ResourceManager manager(100);
     assert(manager.acquire("owner", 100).ok());
@@ -254,6 +264,7 @@ int main() {
     blocked_acquire_succeeds_after_release();
     timed_out_acquire_leaves_state_unchanged();
     invalid_timeout_is_rejected();
+    oversized_infinite_acquire_fails_immediately();
     priority_and_fifo_order_waiters();
     fitting_request_can_pass_oversized_waiter();
     queued_name_is_rejected_as_duplicate();

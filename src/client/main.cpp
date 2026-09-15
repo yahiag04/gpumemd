@@ -15,7 +15,9 @@ namespace {
 void print_usage(std::ostream& output) {
     output << "Usage: gpumemctl --socket PATH COMMAND [ARGUMENTS...]\n\n"
               "Commands: acquire NAME SIZE [PRIORITY] [TIMEOUT_MS],\n"
-              "          try_acquire NAME SIZE, release NAME, status\n";
+              "          try_acquire NAME SIZE, release NAME, status,\n"
+              "          register NAME SIZE METADATA, unregister NAME,\n"
+              "          retain NAME, release_model NAME, models\n";
 }
 
 bool write_all(int fd, std::string_view data) {
@@ -91,13 +93,17 @@ int main(int argc, char* argv[]) {
 
     std::string response;
     char buffer[4096];
+    bool response_complete = false;
+    const bool multiline = parsed.command.type == gpumemd::CommandType::Status ||
+                           parsed.command.type == gpumemd::CommandType::Models;
     while (true) {
         const ssize_t count = read(fd, buffer, sizeof(buffer));
         if (count > 0) {
             response.append(buffer, static_cast<std::size_t>(count));
-            if ((parsed.command.type == gpumemd::CommandType::Status && response.ends_with("END\n")) ||
-                (parsed.command.type != gpumemd::CommandType::Status &&
-                 response.find('\n') != std::string::npos)) {
+            if ((response.starts_with("ERR ") && response.find('\n') != std::string::npos) ||
+                (multiline && response.ends_with("END\n")) ||
+                (!multiline && response.find('\n') != std::string::npos)) {
+                response_complete = true;
                 break;
             }
         } else if (count < 0 && errno == EINTR) {
@@ -108,5 +114,9 @@ int main(int argc, char* argv[]) {
     }
     close(fd);
     std::cout << response;
+    if (!response_complete) {
+        std::cerr << "gpumemctl: connection closed before response completed\n";
+        return 1;
+    }
     return response.starts_with("OK ") ? 0 : 1;
 }

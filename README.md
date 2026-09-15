@@ -1,14 +1,14 @@
 # gpumemd
 
-A GPU resource broker being built incrementally in modern C++.
-The first release, v0.1, will provide simulated memory reservations through a
-Unix domain socket, with no CUDA or Metal dependency.
+A GPU resource and model-registry broker being built incrementally in modern
+C++, with no CUDA or Metal dependency yet.
 
-**Current state: v0.2 implemented.** CMake builds the daemon, a hardware-
-independent `ResourceManager`, the text-command parser, and `gpumemctl`. CTest
-covers accounting, waiting queues, priorities, timeouts, parsing, CLI behavior,
-and Unix socket integration. No GPU memory is allocated; all accounting is
-simulated.
+**Current state: v0.3 implemented.** CMake builds the daemon, the independent
+`ResourceManager` and `ModelRegistry` cores, the text-command parser, and
+`gpumemctl`. CTest covers accounting, waiting queues, priorities, timeouts,
+model lifecycle and concurrency, parsing, CLI behavior, and Unix socket
+integration. No GPU memory is allocated; resource accounting is simulated and
+the registry records model metadata only.
 
 ## Build and test
 
@@ -43,16 +43,39 @@ In another terminal, use the client:
 ./build/gpumemctl --socket /tmp/gpumemd.sock acquire processC 8GB 10 5000
 ./build/gpumemctl --socket /tmp/gpumemd.sock status
 ./build/gpumemctl --socket /tmp/gpumemd.sock release processA
+./build/gpumemctl --socket /tmp/gpumemd.sock register bert 7GB bert-base
+./build/gpumemctl --socket /tmp/gpumemd.sock retain bert
+./build/gpumemctl --socket /tmp/gpumemd.sock models
+./build/gpumemctl --socket /tmp/gpumemd.sock release_model bert
+./build/gpumemctl --socket /tmp/gpumemd.sock unregister bert
 ```
 
 `gpumemctl` returns a non-zero status for broker or command errors.
 `acquire` waits for memory when needed; its optional values are priority and
-timeout in milliseconds. `try_acquire` never waits.
+timeout in milliseconds. `try_acquire` never waits. An `acquire` larger than
+the daemon's total capacity is impossible and returns `insufficient_memory`
+immediately, even when its timeout would otherwise wait forever. A timeout of
+`0` is also an immediate, non-blocking attempt.
+
+## Model registry
+
+`register NAME SIZE METADATA` creates a model record with reference count and
+last-access sequence set to zero. `retain NAME` increments its reference count,
+and `release_model NAME` decrements a positive count; reaching zero leaves the
+record registered. `unregister NAME` removes only a zero-reference record and
+returns `model_in_use` otherwise. `models` lists records sorted by name with
+their metadata, declared footprint in bytes, reference count, and monotonic
+last-access sequence.
+
+The registered footprint is **descriptive only** in v0.3. Registering or
+retaining a model does not reserve simulated GPU memory, change `status`, load
+model data, or establish residency. Metadata is a single non-empty ASCII token
+of at most 128 bytes; quoting and whitespace are not supported.
 
 ## Structure and next steps
 
-- `include/gpumemd/`: public core types and the `ResourceManager` API.
-- `src/core/`: hardware-independent resource accounting implementation.
+- `include/gpumemd/`: public core types and the resource/registry APIs.
+- `src/core/`: hardware-independent resource accounting and model registry.
 - `include/gpumemd/protocol.hpp` and `src/protocol/`: text-command parser.
 - `src/daemon/`: daemon entry point and option handling.
 - `include/gpumemd/server.hpp` and `src/ipc/`: multi-client Unix socket server.
@@ -63,11 +86,10 @@ timeout in milliseconds. `try_acquire` never waits.
 - [Template plan](docs/superpowers/plans/2026-09-11-template.md): starter checklist.
 - [AGENTS.md](AGENTS.md): project scope and roadmap.
 
-The v0.1 acceptance demonstration uses two concurrent clients to acquire and
-release reservations, then checks that final free capacity equals total capacity.
-The v0.2 acceptance demonstration also uses a queued `acquire` that succeeds
-after another client releases its reservation.
+The v0.3 acceptance demonstration combines concurrent resource clients with a
+model registration/retain/release lifecycle, then verifies that resource
+capacity is fully restored and the unregistered model no longer appears.
 
-Scheduling queues, model residency, eviction, hardware backends, and multi-GPU
-support remain in their later roadmap versions.
-# gpumemd
+Model residency, loading, eviction, accelerator backends, GPU allocation,
+CUDA/Metal integration, and multi-GPU support remain future work. The v0.3
+registry deliberately does not implement those subsystems.

@@ -1,5 +1,6 @@
 #include "gpumemd/server.hpp"
 
+#include "gpumemd/model_registry.hpp"
 #include "gpumemd/resource_manager.hpp"
 
 #include <cassert>
@@ -76,7 +77,8 @@ void serves_multiple_clients_and_preserves_state() {
     const std::string path = socket_path();
     unlink(path.c_str());
     gpumemd::ResourceManager manager(10'000);
-    gpumemd::UnixSocketServer server(manager, path);
+    gpumemd::ModelRegistry registry;
+    gpumemd::UnixSocketServer server(manager, registry, path);
     int run_result = -1;
     std::thread server_thread([&] { run_result = server.run(); });
 
@@ -85,7 +87,7 @@ void serves_multiple_clients_and_preserves_state() {
     struct stat socket_info {};
     assert(stat(path.c_str(), &socket_info) == 0);
     assert((socket_info.st_mode & 0777) == 0600);
-    gpumemd::UnixSocketServer conflicting_server(manager, path);
+    gpumemd::UnixSocketServer conflicting_server(manager, registry, path);
     assert(conflicting_server.run() == -1);
     assert(request(first, "acquire processA 4KB") ==
            "OK acquired processA 4000\n");
@@ -109,7 +111,8 @@ void reports_parse_and_accounting_errors() {
     const std::string path = socket_path();
     unlink(path.c_str());
     gpumemd::ResourceManager manager(100);
-    gpumemd::UnixSocketServer server(manager, path);
+    gpumemd::ModelRegistry registry;
+    gpumemd::UnixSocketServer server(manager, registry, path);
     std::thread server_thread([&] { server.run(); });
 
     const int client = connect_to(path);
@@ -131,7 +134,8 @@ void blocked_acquire_does_not_stop_other_clients() {
     const std::string path = socket_path();
     unlink(path.c_str());
     gpumemd::ResourceManager manager(100);
-    gpumemd::UnixSocketServer server(manager, path);
+    gpumemd::ModelRegistry registry;
+    gpumemd::UnixSocketServer server(manager, registry, path);
     std::thread server_thread([&] { server.run(); });
 
     const int blocker = connect_to(path);
@@ -157,8 +161,39 @@ void blocked_acquire_does_not_stop_other_clients() {
     assert(access(path.c_str(), F_OK) != 0);
 }
 
+void serves_model_registry_without_changing_resource_status() {
+    const std::string path = socket_path();
+    unlink(path.c_str());
+    gpumemd::ResourceManager manager(10'000);
+    gpumemd::ModelRegistry registry;
+    gpumemd::UnixSocketServer server(manager, registry, path);
+    std::thread server_thread([&] { server.run(); });
+
+    const int client = connect_to(path);
+    assert(request(client, "register bert 7GB bert-base") ==
+           "OK registered bert 7000000000\n");
+    assert(request(client, "status", true) ==
+           "OK status 10000 0 10000 0\n"
+           "END\n");
+    assert(request(client, "retain bert") == "OK retained bert 1\n");
+    assert(request(client, "models", true) ==
+           "OK models 1\n"
+           "MODEL bert bert-base 7000000000 1 1\n"
+           "END\n");
+    assert(request(client, "release_model bert") ==
+           "OK released_model bert 0\n");
+    assert(request(client, "unregister bert") ==
+           "OK unregistered bert 0\n");
+    close(client);
+
+    server.request_shutdown();
+    server_thread.join();
+    assert(access(path.c_str(), F_OK) != 0);
+}
+
 int main() {
     serves_multiple_clients_and_preserves_state();
     reports_parse_and_accounting_errors();
     blocked_acquire_does_not_stop_other_clients();
+    serves_model_registry_without_changing_resource_status();
 }
