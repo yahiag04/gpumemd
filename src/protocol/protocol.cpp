@@ -25,6 +25,16 @@ bool valid_name(std::string_view name) noexcept {
     });
 }
 
+bool valid_metadata(std::string_view metadata) noexcept {
+    if (metadata.empty() || metadata.size() > 128) {
+        return false;
+    }
+    return std::all_of(metadata.begin(), metadata.end(), [](char character) {
+        const auto value = static_cast<unsigned char>(character);
+        return value >= 32 && value < 127 && character != ' ' && character != '\t';
+    });
+}
+
 std::optional<Bytes> parse_size(std::string_view token) noexcept {
     Bytes multiplier = 1;
     std::string_view digits = token;
@@ -157,6 +167,53 @@ ParseResult parse_command(std::string_view line) {
         return {ParseError::None, {CommandType::Status, {}, 0}};
     }
 
+    if (tokens[0] == "models") {
+        if (tokens.size() != 1) {
+            return error(ParseError::InvalidRequest);
+        }
+        return {ParseError::None, {CommandType::Models}};
+    }
+
+    if (tokens[0] == "register") {
+        if (tokens.size() != 4) {
+            return error(ParseError::InvalidRequest);
+        }
+        if (!valid_name(tokens[1])) {
+            return error(ParseError::InvalidModelId);
+        }
+        const auto bytes = parse_size(tokens[2]);
+        if (!bytes) {
+            return error(ParseError::InvalidSize);
+        }
+        if (!valid_metadata(tokens[3])) {
+            return error(ParseError::InvalidMetadata);
+        }
+        Command command;
+        command.type = CommandType::RegisterModel;
+        command.name = std::string(tokens[1]);
+        command.bytes = *bytes;
+        command.metadata = std::string(tokens[3]);
+        return {ParseError::None, std::move(command)};
+    }
+
+    if (tokens[0] == "unregister" || tokens[0] == "retain" ||
+        tokens[0] == "release_model") {
+        if (tokens.size() != 2) {
+            return error(ParseError::InvalidRequest);
+        }
+        if (!valid_name(tokens[1])) {
+            return error(ParseError::InvalidModelId);
+        }
+        const CommandType type = tokens[0] == "unregister"
+                                     ? CommandType::UnregisterModel
+                                     : tokens[0] == "retain" ? CommandType::RetainModel
+                                                              : CommandType::ReleaseModel;
+        Command command;
+        command.type = type;
+        command.name = std::string(tokens[1]);
+        return {ParseError::None, std::move(command)};
+    }
+
     if (tokens[0] == "release") {
         if (tokens.size() != 2) {
             return error(ParseError::InvalidRequest);
@@ -226,6 +283,10 @@ std::string format_parse_error(ParseError error_code) {
         return "ERR invalid_size invalid memory size\n";
     case ParseError::InvalidName:
         return "ERR invalid_name invalid client name\n";
+    case ParseError::InvalidModelId:
+        return "ERR invalid_model_id invalid model ID\n";
+    case ParseError::InvalidMetadata:
+        return "ERR invalid_metadata invalid model metadata\n";
     case ParseError::None:
         return "";
     }
@@ -268,6 +329,48 @@ std::string format_status(const StatusSnapshot& snapshot) {
            << snapshot.free << ' ' << snapshot.reservations.size() << '\n';
     for (const auto& reservation : snapshot.reservations) {
         output << "CLIENT " << reservation.name << ' ' << reservation.bytes << '\n';
+    }
+    output << "END\n";
+    return output.str();
+}
+
+std::string format_model_operation_result(std::string_view action,
+                                          std::string_view name,
+                                          const ModelOperationResult& result) {
+    if (result.ok()) {
+        std::ostringstream output;
+        output << "OK " << action << ' ' << name << ' ' << result.amount << '\n';
+        return output.str();
+    }
+
+    switch (result.error) {
+    case ModelError::InvalidId:
+        return "ERR invalid_model_id invalid model ID\n";
+    case ModelError::InvalidMetadata:
+        return "ERR invalid_metadata invalid model metadata\n";
+    case ModelError::InvalidSize:
+        return "ERR invalid_size invalid memory size\n";
+    case ModelError::DuplicateModel:
+        return "ERR duplicate_model model already exists\n";
+    case ModelError::UnknownModel:
+        return "ERR unknown_model model not found\n";
+    case ModelError::ModelInUse:
+        return "ERR model_in_use model is in use\n";
+    case ModelError::RefcountUnderflow:
+        return "ERR refcount_underflow model reference count is already zero\n";
+    case ModelError::None:
+        break;
+    }
+    return "ERR internal_error internal model registry error\n";
+}
+
+std::string format_models(const ModelSnapshot& snapshot) {
+    std::ostringstream output;
+    output << "OK models " << snapshot.models.size() << '\n';
+    for (const auto& model : snapshot.models) {
+        output << "MODEL " << model.id << ' ' << model.metadata << ' '
+               << model.footprint_bytes << ' ' << model.ref_count << ' '
+               << model.last_access << '\n';
     }
     output << "END\n";
     return output.str();

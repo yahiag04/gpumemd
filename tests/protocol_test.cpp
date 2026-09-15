@@ -1,4 +1,5 @@
 #include "gpumemd/protocol.hpp"
+#include "gpumemd/model_registry.hpp"
 
 #include <cassert>
 #include <limits>
@@ -14,6 +15,12 @@ using gpumemd::format_status;
 using gpumemd::OperationResult;
 using gpumemd::StatusSnapshot;
 using gpumemd::Reservation;
+using gpumemd::ModelError;
+using gpumemd::ModelOperationResult;
+using gpumemd::ModelRecord;
+using gpumemd::ModelSnapshot;
+using gpumemd::format_model_operation_result;
+using gpumemd::format_models;
 using gpumemd::parse_command;
 using gpumemd::parse_bytes;
 
@@ -136,6 +143,82 @@ void rejects_invalid_wait_options() {
     assert(!result.ok() && result.error == ParseError::InvalidRequest);
 }
 
+void parses_model_commands() {
+    auto result = parse_command("register bert 7GB bert-base");
+    assert(result.ok() && result.command.type == CommandType::RegisterModel);
+    assert(result.command.name == "bert");
+    assert(result.command.bytes == 7000000000);
+    assert(result.command.metadata == "bert-base");
+
+    result = parse_command("unregister bert");
+    assert(result.ok() && result.command.type == CommandType::UnregisterModel);
+    result = parse_command("retain bert");
+    assert(result.ok() && result.command.type == CommandType::RetainModel);
+    result = parse_command("release_model bert");
+    assert(result.ok() && result.command.type == CommandType::ReleaseModel);
+    result = parse_command("models");
+    assert(result.ok() && result.command.type == CommandType::Models);
+}
+
+void rejects_invalid_model_commands() {
+    assert(parse_command("register bert 1").error == ParseError::InvalidRequest);
+    assert(parse_command("register bad/id 1 base").error == ParseError::InvalidModelId);
+    assert(parse_command("register bert 0 base").error == ParseError::InvalidSize);
+    assert(parse_command("register bert 1 bad metadata").error == ParseError::InvalidRequest);
+    assert(parse_command(std::string("register bert 1 bad") + '\x01').error ==
+           ParseError::InvalidMetadata);
+    assert(parse_command("register bert 1 ").error == ParseError::InvalidRequest);
+    assert(parse_command("retain missing extra").error == ParseError::InvalidRequest);
+    assert(parse_command("unregister bad/id").error == ParseError::InvalidModelId);
+}
+
+void formats_model_wire_responses() {
+    assert(format_parse_error(ParseError::InvalidModelId) ==
+           "ERR invalid_model_id invalid model ID\n");
+    assert(format_parse_error(ParseError::InvalidMetadata) ==
+           "ERR invalid_metadata invalid model metadata\n");
+
+    assert(format_model_operation_result("registered", "bert",
+                                         ModelOperationResult{ModelError::None, 7000000000}) ==
+           "OK registered bert 7000000000\n");
+    assert(format_model_operation_result("retained", "bert",
+                                         ModelOperationResult{ModelError::None, 1}) ==
+           "OK retained bert 1\n");
+    assert(format_model_operation_result("released_model", "bert",
+                                         ModelOperationResult{ModelError::None, 0}) ==
+           "OK released_model bert 0\n");
+    assert(format_model_operation_result("unregistered", "bert",
+                                         ModelOperationResult{ModelError::None, 0}) ==
+           "OK unregistered bert 0\n");
+    assert(format_model_operation_result("registered", "bad/id",
+                                         ModelOperationResult{ModelError::InvalidId, 0}) ==
+           "ERR invalid_model_id invalid model ID\n");
+    assert(format_model_operation_result("registered", "bert",
+                                         ModelOperationResult{ModelError::InvalidMetadata, 0}) ==
+           "ERR invalid_metadata invalid model metadata\n");
+    assert(format_model_operation_result("registered", "bert",
+                                         ModelOperationResult{ModelError::DuplicateModel, 0}) ==
+           "ERR duplicate_model model already exists\n");
+    assert(format_model_operation_result("retained", "missing",
+                                         ModelOperationResult{ModelError::UnknownModel, 0}) ==
+           "ERR unknown_model model not found\n");
+    assert(format_model_operation_result("unregistered", "bert",
+                                         ModelOperationResult{ModelError::ModelInUse, 0}) ==
+           "ERR model_in_use model is in use\n");
+    assert(format_model_operation_result("released_model", "bert",
+                                         ModelOperationResult{ModelError::RefcountUnderflow, 0}) ==
+           "ERR refcount_underflow model reference count is already zero\n");
+
+    const ModelSnapshot snapshot{{
+        ModelRecord{"alpha", "a", 2, 0, 0},
+        ModelRecord{"bert", "bert-base", 7000000000, 1, 3}}};
+    assert(format_models(snapshot) ==
+           "OK models 2\n"
+           "MODEL alpha a 2 0 0\n"
+           "MODEL bert bert-base 7000000000 1 3\n"
+           "END\n");
+}
+
 int main() {
     parses_supported_commands_and_units();
     rejects_malformed_commands();
@@ -144,4 +227,7 @@ int main() {
     formats_wire_responses();
     parses_wait_options_and_try_acquire();
     rejects_invalid_wait_options();
+    parses_model_commands();
+    rejects_invalid_model_commands();
+    formats_model_wire_responses();
 }
