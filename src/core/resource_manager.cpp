@@ -108,6 +108,9 @@ OperationResult ResourceManager::acquire(std::string_view name, Bytes bytes,
     if (options.timeout.count() < 0) {
         return {ErrorCode::InvalidTimeout, 0};
     }
+    if (bytes > capacity_) {
+        return {ErrorCode::InsufficientMemory, 0};
+    }
     if (options.timeout.count() == 0) {
         return try_acquire(name, bytes);
     }
