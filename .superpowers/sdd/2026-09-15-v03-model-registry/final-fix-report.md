@@ -54,4 +54,3 @@ ctest --test-dir build --output-on-failure
 ## Concerns
 
 None within the requested scope. The test uses POSIX process and Unix-socket APIs, matching the project's existing Unix-only IPC design.
-
