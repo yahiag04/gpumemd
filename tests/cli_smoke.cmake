@@ -3,7 +3,14 @@ if(SCENARIO STREQUAL "client_help")
     set(program "${GPUMEMCTL}")
     set(arguments --help)
     set(expected_result 0)
-    set(expected_output "Usage: gpumemctl")
+    set(expected_outputs
+        "Usage: gpumemctl"
+        "register NAME SIZE METADATA"
+        "unregister NAME"
+        "retain NAME"
+        "release_model NAME"
+        "models"
+    )
 elseif(SCENARIO STREQUAL "help")
     set(program "${GPUMEMD}")
     set(arguments --help)
@@ -51,8 +58,18 @@ else()
     endif()
 endif()
 
-string(FIND "${actual_output}" "${expected_output}" match_position)
-if(match_position EQUAL -1)
-    message(FATAL_ERROR
-        "${SCENARIO}: missing '${expected_output}' in '${actual_output}'")
+if(expected_outputs)
+    foreach(expected_output IN LISTS expected_outputs)
+        string(FIND "${actual_output}" "${expected_output}" match_position)
+        if(match_position EQUAL -1)
+            message(FATAL_ERROR
+                "${SCENARIO}: missing '${expected_output}' in '${actual_output}'")
+        endif()
+    endforeach()
+else()
+    string(FIND "${actual_output}" "${expected_output}" match_position)
+    if(match_position EQUAL -1)
+        message(FATAL_ERROR
+            "${SCENARIO}: missing '${expected_output}' in '${actual_output}'")
+    endif()
 endif()

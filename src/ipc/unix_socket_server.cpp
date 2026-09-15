@@ -27,7 +27,7 @@ struct Client {
     std::string input;
 };
 
-bool process_input(Client& client, ResourceManager& manager);
+bool process_input(Client& client, ResourceManager& manager, ModelRegistry& registry);
 
 bool send_all(int fd, const std::string& response) noexcept {
     std::size_t sent = 0;
@@ -44,7 +44,8 @@ bool send_all(int fd, const std::string& response) noexcept {
     return true;
 }
 
-std::string dispatch(ResourceManager& manager, const Command& command) {
+std::string dispatch(ResourceManager& manager, ModelRegistry& registry,
+                     const Command& command) {
     switch (command.type) {
     case CommandType::Acquire:
         if (command.acquire_mode == AcquireMode::Try) {
@@ -59,11 +60,26 @@ std::string dispatch(ResourceManager& manager, const Command& command) {
                                        manager.release(command.name));
     case CommandType::Status:
         return format_status(manager.status());
+    case CommandType::RegisterModel:
+        return format_model_operation_result(
+            "registered", command.name,
+            registry.register_model(command.name, command.bytes, command.metadata));
+    case CommandType::UnregisterModel:
+        return format_model_operation_result("unregistered", command.name,
+                                             registry.unregister_model(command.name));
+    case CommandType::RetainModel:
+        return format_model_operation_result("retained", command.name,
+                                             registry.retain(command.name));
+    case CommandType::ReleaseModel:
+        return format_model_operation_result("released_model", command.name,
+                                             registry.release_model(command.name));
+    case CommandType::Models:
+        return format_models(registry.models());
     }
     return "ERR internal_error unknown command type\n";
 }
 
-void client_session(int fd, ResourceManager& manager,
+void client_session(int fd, ResourceManager& manager, ModelRegistry& registry,
                     const std::atomic<bool>& stop_requested) {
     timeval timeout{0, 100'000};
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
@@ -73,7 +89,7 @@ void client_session(int fd, ResourceManager& manager,
         const ssize_t count = read(fd, buffer, sizeof(buffer));
         if (count > 0) {
             client.input.append(buffer, static_cast<std::size_t>(count));
-            if (!process_input(client, manager)) {
+            if (!process_input(client, manager, registry)) {
                 break;
             }
         } else if (count == 0) {
@@ -90,7 +106,7 @@ void client_session(int fd, ResourceManager& manager,
     close(fd);
 }
 
-bool process_input(Client& client, ResourceManager& manager) {
+bool process_input(Client& client, ResourceManager& manager, ModelRegistry& registry) {
     while (true) {
         const std::size_t newline = client.input.find('\n');
         if (newline == std::string::npos) {
@@ -116,7 +132,7 @@ bool process_input(Client& client, ResourceManager& manager) {
 
         const ParseResult parsed = parse_command(line);
         const std::string response = parsed.ok()
-                                          ? dispatch(manager, parsed.command)
+                                          ? dispatch(manager, registry, parsed.command)
                                           : format_parse_error(parsed.error);
         if (!send_all(client.fd, response)) {
             return false;
@@ -126,8 +142,9 @@ bool process_input(Client& client, ResourceManager& manager) {
 
 } // namespace
 
-UnixSocketServer::UnixSocketServer(ResourceManager& manager, std::string socket_path)
-    : manager_(manager), socket_path_(std::move(socket_path)) {}
+UnixSocketServer::UnixSocketServer(ResourceManager& manager, ModelRegistry& registry,
+                                   std::string socket_path)
+    : manager_(manager), registry_(registry), socket_path_(std::move(socket_path)) {}
 
 UnixSocketServer::~UnixSocketServer() {
     request_shutdown();
@@ -201,7 +218,7 @@ int UnixSocketServer::run(const std::function<bool()>& external_stop) {
             const int client_fd = accept(listen_fd_, nullptr, nullptr);
             if (client_fd >= 0) {
                 workers.emplace_back(client_session, client_fd, std::ref(manager_),
-                                     std::cref(stop_requested_));
+                                     std::ref(registry_), std::cref(stop_requested_));
             }
         }
     }

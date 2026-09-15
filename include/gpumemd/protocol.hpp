@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gpumemd/memory.hpp"
+#include "gpumemd/model_registry.hpp"
 #include "gpumemd/resource_manager.hpp"
 
 #include <optional>
@@ -13,6 +14,11 @@ enum class CommandType {
     Acquire,
     Release,
     Status,
+    RegisterModel,
+    UnregisterModel,
+    RetainModel,
+    ReleaseModel,
+    Models,
 };
 
 enum class AcquireMode {
@@ -25,6 +31,8 @@ enum class ParseError {
     InvalidRequest,
     InvalidSize,
     InvalidName,
+    InvalidModelId,
+    InvalidMetadata,
 };
 
 struct Command {
@@ -33,6 +41,7 @@ struct Command {
     Bytes bytes{0};
     AcquireMode acquire_mode{AcquireMode::Wait};
     AcquireOptions options{};
+    std::string metadata;
 };
 
 struct ParseResult {
@@ -49,5 +58,9 @@ struct ParseResult {
                                                   std::string_view name,
                                                   const OperationResult& result);
 [[nodiscard]] std::string format_status(const StatusSnapshot& snapshot);
+[[nodiscard]] std::string format_model_operation_result(std::string_view action,
+                                                         std::string_view name,
+                                                         const ModelOperationResult& result);
+[[nodiscard]] std::string format_models(const ModelSnapshot& snapshot);
 
 } // namespace gpumemd
