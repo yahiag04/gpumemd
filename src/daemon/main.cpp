@@ -1,3 +1,4 @@
+#include "gpumemd/model_registry.hpp"
 #include "gpumemd/protocol.hpp"
 #include "gpumemd/resource_manager.hpp"
 #include "gpumemd/server.hpp"
@@ -57,7 +58,8 @@ int main(int argc, char* argv[]) {
 
     try {
         gpumemd::ResourceManager manager(*capacity);
-        gpumemd::UnixSocketServer server(manager, socket_path);
+        gpumemd::ModelRegistry registry;
+        gpumemd::UnixSocketServer server(manager, registry, socket_path);
         std::signal(SIGINT, handle_signal);
         std::signal(SIGTERM, handle_signal);
         std::signal(SIGPIPE, SIG_IGN);
