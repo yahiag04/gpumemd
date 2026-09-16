@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace gpumemd {
 
@@ -232,6 +233,14 @@ OperationResult ResourceManager::replace_model_reservations(
     std::lock_guard lock(mutex_);
     if (model_reservations_.contains(std::string(id))) {
         return {ErrorCode::DuplicateClient, 0};
+    }
+
+    std::unordered_set<std::string> unique_evictions;
+    unique_evictions.reserve(evictions.size());
+    for (const auto& eviction : evictions) {
+        if (!unique_evictions.insert(eviction).second) {
+            return {ErrorCode::DuplicateClient, 0};
+        }
     }
 
     Bytes evicted_bytes = 0;
