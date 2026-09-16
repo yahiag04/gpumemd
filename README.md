@@ -1,14 +1,17 @@
 # gpumemd
 
-A GPU resource and model-registry broker being built incrementally in modern
-C++, with no CUDA or Metal dependency yet.
+A simulated GPU resource and model-residency broker being built incrementally
+in modern C++, with no CUDA or Metal dependency yet.
 
-**Current state: v0.3 implemented.** CMake builds the daemon, the independent
-`ResourceManager` and `ModelRegistry` cores, the text-command parser, and
-`gpumemctl`. CTest covers accounting, waiting queues, priorities, timeouts,
-model lifecycle and concurrency, parsing, CLI behavior, and Unix socket
-integration. No GPU memory is allocated; resource accounting is simulated and
-the registry records model metadata only.
+**Current state: v0.4 implemented.** CMake builds the daemon, the independent
+`ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
+text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
+priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
+CLI behavior, and Unix socket integration.
+
+v0.4 is simulation-only: it does not load model files or allocate GPU memory.
+Model footprints and residency consume logical reservations in the daemon's
+configured capacity so residency policy can be exercised without hardware.
 
 ## Build and test
 
@@ -44,9 +47,12 @@ In another terminal, use the client:
 ./build/gpumemctl --socket /tmp/gpumemd.sock status
 ./build/gpumemctl --socket /tmp/gpumemd.sock release processA
 ./build/gpumemctl --socket /tmp/gpumemd.sock register bert 7GB bert-base
+./build/gpumemctl --socket /tmp/gpumemd.sock load bert
 ./build/gpumemctl --socket /tmp/gpumemd.sock retain bert
+./build/gpumemctl --socket /tmp/gpumemd.sock residency
 ./build/gpumemctl --socket /tmp/gpumemd.sock models
 ./build/gpumemctl --socket /tmp/gpumemd.sock release_model bert
+./build/gpumemctl --socket /tmp/gpumemd.sock unload bert
 ./build/gpumemctl --socket /tmp/gpumemd.sock unregister bert
 ```
 
@@ -57,7 +63,7 @@ the daemon's total capacity is impossible and returns `insufficient_memory`
 immediately, even when its timeout would otherwise wait forever. A timeout of
 `0` is also an immediate, non-blocking attempt.
 
-## Model registry
+## Model registry and residency
 
 `register NAME SIZE METADATA` creates a model record with reference count and
 last-access sequence set to zero. `retain NAME` increments its reference count,
@@ -67,15 +73,29 @@ returns `model_in_use` otherwise. `models` lists records sorted by name with
 their metadata, declared footprint in bytes, reference count, and monotonic
 last-access sequence.
 
-The registered footprint is **descriptive only** in v0.3. Registering or
-retaining a model does not reserve simulated GPU memory, change `status`, load
-model data, or establish residency. Metadata is a single non-empty ASCII token
+`load NAME` explicitly makes a registered model resident and reserves its
+declared footprint under `model:NAME`; `unload NAME` explicitly releases that
+reservation. Loading an already resident model is idempotent. `residency`
+lists resident models with footprint, reference count, and monotonic load
+order. Registration and retention alone do not make a model resident.
+
+When a load needs capacity, the broker evicts the least-recently-loaded
+resident models first, but only models whose reference count is zero. A model
+protected by `retain` cannot be evicted or explicitly unloaded until matching
+`release_model` calls return its reference count to zero. If enough capacity
+cannot be obtained, the load fails with `insufficient_memory` and preserves
+all existing residency and reservations; failed loads never partially evict
+models.
+
+Footprints are **logical reservations**, not measured allocations or real
+model bytes. v0.4 has no accelerator backend, model-file loading, CUDA/Metal
+integration, or multi-GPU support. Metadata is a single non-empty ASCII token
 of at most 128 bytes; quoting and whitespace are not supported.
 
 ## Structure and next steps
 
 - `include/gpumemd/`: public core types and the resource/registry APIs.
-- `src/core/`: hardware-independent resource accounting and model registry.
+- `src/core/`: hardware-independent resource, registry, and residency logic.
 - `include/gpumemd/protocol.hpp` and `src/protocol/`: text-command parser.
 - `src/daemon/`: daemon entry point and option handling.
 - `include/gpumemd/server.hpp` and `src/ipc/`: multi-client Unix socket server.
@@ -86,10 +106,10 @@ of at most 128 bytes; quoting and whitespace are not supported.
 - [Template plan](docs/superpowers/plans/2026-09-11-template.md): starter checklist.
 - [AGENTS.md](AGENTS.md): project scope and roadmap.
 
-The v0.3 acceptance demonstration combines concurrent resource clients with a
-model registration/retain/release lifecycle, then verifies that resource
-capacity is fully restored and the unregistered model no longer appears.
+The v0.4 acceptance demonstration combines concurrent resource clients with
+three registered models, explicit loads, refcount protection, LRU eviction,
+and complete unload/release/unregister cleanup. Final `status` should report
+used `0` and all configured capacity free.
 
-Model residency, loading, eviction, accelerator backends, GPU allocation,
-CUDA/Metal integration, and multi-GPU support remain future work. The v0.3
-registry deliberately does not implement those subsystems.
+Accelerator backends, real model loading, GPU allocation, CUDA/Metal
+integration, and multi-GPU support remain future work.
