@@ -19,8 +19,11 @@ using gpumemd::ModelError;
 using gpumemd::ModelOperationResult;
 using gpumemd::ModelRecord;
 using gpumemd::ModelSnapshot;
+using gpumemd::ResidencySnapshot;
 using gpumemd::format_model_operation_result;
 using gpumemd::format_models;
+using gpumemd::format_residency;
+using gpumemd::format_residency_operation_result;
 using gpumemd::parse_command;
 using gpumemd::parse_bytes;
 
@@ -219,6 +222,42 @@ void formats_model_wire_responses() {
            "END\n");
 }
 
+void parses_residency_commands() {
+    auto result = parse_command("load bert");
+    assert(result.ok() && result.command.type == CommandType::LoadModel);
+    assert(result.command.name == "bert");
+    result = parse_command("unload bert");
+    assert(result.ok() && result.command.type == CommandType::UnloadModel);
+    assert(result.command.name == "bert");
+    result = parse_command("residency");
+    assert(result.ok() && result.command.type == CommandType::Residency);
+    assert(parse_command("load bert extra").error == ParseError::InvalidRequest);
+    assert(parse_command("unload bad/id").error == ParseError::InvalidModelId);
+    assert(parse_command("residency extra").error == ParseError::InvalidRequest);
+}
+
+void formats_residency_operation_responses() {
+    assert(format_residency_operation_result(
+               "loaded", "bert", ModelOperationResult{ModelError::None, 7000000000}) ==
+           "OK loaded bert 7000000000\n");
+    assert(format_residency_operation_result(
+               "unloaded", "bert", ModelOperationResult{ModelError::None, 7000000000}) ==
+           "OK unloaded bert 7000000000\n");
+    assert(format_residency_operation_result(
+               "unloaded", "bert", ModelOperationResult{ModelError::UnknownResidency, 0}) ==
+           "ERR unknown_residency model is not resident\n");
+    assert(format_residency_operation_result(
+               "loaded", "bert", ModelOperationResult{ModelError::InsufficientMemory, 0}) ==
+           "ERR insufficient_memory insufficient memory for model\n");
+}
+
+void formats_empty_and_loaded_residency() {
+    assert(format_residency({}) == "OK residency 0\nEND\n");
+    ResidencySnapshot snapshot{{{"bert", 7000000000, 0, true, 1}}};
+    assert(format_residency(snapshot) ==
+           "OK residency 1\nRESIDENT bert 7000000000 0 1\nEND\n");
+}
+
 int main() {
     parses_supported_commands_and_units();
     rejects_malformed_commands();
@@ -230,4 +269,7 @@ int main() {
     parses_model_commands();
     rejects_invalid_model_commands();
     formats_model_wire_responses();
+    parses_residency_commands();
+    formats_residency_operation_responses();
+    formats_empty_and_loaded_residency();
 }

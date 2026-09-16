@@ -2,6 +2,7 @@
 
 #include "gpumemd/memory.hpp"
 #include "gpumemd/model_registry.hpp"
+#include "gpumemd/model_residency.hpp"
 #include "gpumemd/resource_manager.hpp"
 
 #include <optional>
@@ -19,6 +20,9 @@ enum class CommandType {
     RetainModel,
     ReleaseModel,
     Models,
+    LoadModel,
+    UnloadModel,
+    Residency,
 };
 
 enum class AcquireMode {
@@ -62,5 +66,10 @@ struct ParseResult {
                                                          std::string_view name,
                                                          const ModelOperationResult& result);
 [[nodiscard]] std::string format_models(const ModelSnapshot& snapshot);
+[[nodiscard]] std::string format_residency_operation_result(
+    std::string_view action,
+    std::string_view name,
+    const ModelOperationResult& result);
+[[nodiscard]] std::string format_residency(const ResidencySnapshot& snapshot);
 
 } // namespace gpumemd
