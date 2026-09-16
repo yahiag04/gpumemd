@@ -57,6 +57,10 @@ public:
                                          AcquireOptions options = {});
     [[nodiscard]] OperationResult try_acquire(std::string_view name, Bytes bytes);
     [[nodiscard]] OperationResult release(std::string_view name);
+    [[nodiscard]] OperationResult acquire_model(std::string_view id, Bytes bytes);
+    [[nodiscard]] OperationResult release_model(std::string_view id);
+    [[nodiscard]] OperationResult replace_model_reservations(
+        const std::vector<std::string>& evictions, std::string_view id, Bytes bytes);
     [[nodiscard]] StatusSnapshot status() const;
     void cancel_waiters() noexcept;
 
@@ -80,6 +84,7 @@ private:
     const Bytes capacity_;
     Bytes used_{0};
     std::unordered_map<std::string, Bytes> reservations_;
+    std::unordered_map<std::string, Bytes> model_reservations_;
     std::vector<std::shared_ptr<PendingRequest>> pending_;
     std::uint64_t next_sequence_{0};
     mutable std::mutex mutex_;
