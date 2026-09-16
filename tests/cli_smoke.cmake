@@ -10,6 +10,9 @@ if(SCENARIO STREQUAL "client_help")
         "retain NAME"
         "release_model NAME"
         "models"
+        "load NAME"
+        "unload NAME"
+        "residency"
     )
 elseif(SCENARIO STREQUAL "help")
     set(program "${GPUMEMD}")
