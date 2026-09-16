@@ -17,8 +17,11 @@ void print_usage(std::ostream& output) {
               "Commands: acquire NAME SIZE [PRIORITY] [TIMEOUT_MS],\n"
               "          try_acquire NAME SIZE, release NAME, status,\n"
               "          register NAME SIZE METADATA, unregister NAME,\n"
-              "          retain NAME, release_model NAME, models,\n"
-              "          load NAME, unload NAME, residency\n";
+              "          retain NAME, release_model NAME, models\n\n"
+              "Residency commands:\n"
+              "  load NAME\n"
+              "  unload NAME\n"
+              "  residency\n";
 }
 
 bool write_all(int fd, std::string_view data) {

@@ -46,6 +46,8 @@ In another terminal, use the client:
 ./build/gpumemctl --socket /tmp/gpumemd.sock acquire processC 8GB 10 5000
 ./build/gpumemctl --socket /tmp/gpumemd.sock status
 ./build/gpumemctl --socket /tmp/gpumemd.sock release processA
+./build/gpumemctl --socket /tmp/gpumemd.sock release processB
+./build/gpumemctl --socket /tmp/gpumemd.sock release processC
 ./build/gpumemctl --socket /tmp/gpumemd.sock register bert 7GB bert-base
 ./build/gpumemctl --socket /tmp/gpumemd.sock load bert
 ./build/gpumemctl --socket /tmp/gpumemd.sock retain bert

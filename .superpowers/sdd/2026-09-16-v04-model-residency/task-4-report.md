@@ -72,3 +72,45 @@ The live 16 GB acceptance scenario also passed:
   full-suite execution passed; no product change was made for runner behavior.
 - Acceptance artifacts remain under `/tmp/gpumemd-v04-acceptance-M6u7ss`
   because the command runner rejected automated temporary-directory removal.
+
+## Review corrections
+
+- Made the documented command sequence release `processA`, `processB`, and
+  `processC` before loading the 7 GB `bert` model. This restores all 16 GB, so
+  the example is runnable in order while preserving the explicit
+  register/load/retain/release/unload/unregister lifecycle.
+- Strengthened the client-help smoke test to match `load NAME`, `unload NAME`,
+  and `residency` as complete output lines. `unload NAME` can no longer satisfy
+  the independent `load NAME` requirement through substring matching.
+
+### Review RED/GREEN evidence
+
+With only the complete-line assertions added, the focused test failed at the
+new assertion:
+
+```text
+client_help: missing complete line ' load NAME'
+```
+
+After rendering each residency command on its own help line, the focused test
+passed 1/1:
+
+```sh
+cmake --build build --target gpumemctl && \
+ctest --test-dir build -R cli_client_help --output-on-failure
+```
+
+The rebuilt `build-v04-final` tree passed 10/10 tests after removing the
+`com.apple.provenance` extended attribute from generated executables, which
+stopped the environment's transient macOS process kills. Source files and
+tracked build configuration were not changed by this stabilization step.
+
+The README commands were then run in their documented order against a fresh
+16 GB daemon. All resource acquisitions and releases succeeded, `load bert`
+returned `OK loaded bert 7000000000`, and the complete model lifecycle ended
+with:
+
+```text
+OK status 16000000000 0 16000000000 0
+END
+```
