@@ -10,9 +10,11 @@ if(SCENARIO STREQUAL "client_help")
         "retain NAME"
         "release_model NAME"
         "models"
-        "load NAME"
-        "unload NAME"
-        "residency"
+    )
+    set(expected_lines
+        "  load NAME"
+        "  unload NAME"
+        "  residency"
     )
 elseif(SCENARIO STREQUAL "help")
     set(program "${GPUMEMD}")
@@ -75,4 +77,15 @@ else()
         message(FATAL_ERROR
             "${SCENARIO}: missing '${expected_output}' in '${actual_output}'")
     endif()
+endif()
+
+if(expected_lines)
+    string(REPLACE "\n" ";" actual_lines "${actual_output}")
+    foreach(expected_line IN LISTS expected_lines)
+        list(FIND actual_lines "${expected_line}" match_position)
+        if(match_position EQUAL -1)
+            message(FATAL_ERROR
+                "${SCENARIO}: missing complete line '${expected_line}' in '${actual_output}'")
+        endif()
+    endforeach()
 endif()
