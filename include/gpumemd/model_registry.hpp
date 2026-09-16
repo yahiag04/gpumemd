@@ -20,6 +20,8 @@ enum class ModelError {
     UnknownModel,
     ModelInUse,
     RefcountUnderflow,
+    UnknownResidency,
+    InsufficientMemory,
 };
 
 struct ModelOperationResult {

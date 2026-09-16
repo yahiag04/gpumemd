@@ -1,0 +1,174 @@
+#include "gpumemd/model_residency.hpp"
+
+#include <algorithm>
+#include <utility>
+
+namespace gpumemd {
+
+ModelResidencyManager::ModelResidencyManager(ModelRegistry& registry,
+                                             ResourceManager& resources)
+    : registry_(registry), resources_(resources) {}
+
+std::string ModelResidencyManager::reservation_name(std::string_view id) {
+    return "model:" + std::string(id);
+}
+
+ModelRecord* ModelResidencyManager::find_model(ModelSnapshot& snapshot, std::string_view id) {
+    const auto iterator = std::find_if(snapshot.models.begin(), snapshot.models.end(),
+                                       [id](const ModelRecord& model) {
+                                           return model.id == id;
+                                       });
+    return iterator == snapshot.models.end() ? nullptr : &*iterator;
+}
+
+ModelOperationResult ModelResidencyManager::load(std::string_view id) {
+    std::lock_guard lock(mutex_);
+    auto models = registry_.models();
+    const auto* model = find_model(models, id);
+    if (model == nullptr) {
+        return {ModelError::UnknownModel, 0};
+    }
+
+    const auto existing = records_.find(model->id);
+    if (existing != records_.end() && existing->second.resident) {
+        return {ModelError::None, existing->second.footprint_bytes};
+    }
+
+    const auto resource_status = resources_.status();
+    if (model->footprint_bytes > resource_status.capacity) {
+        return {ModelError::InsufficientMemory, 0};
+    }
+
+    std::vector<ResidencyRecord*> evictions;
+    Bytes available = resource_status.free;
+    if (available < model->footprint_bytes) {
+        for (auto& [record_id, record] : records_) {
+            (void)record_id;
+            if (record.resident && record.ref_count == 0) {
+                evictions.push_back(&record);
+            }
+        }
+        std::sort(evictions.begin(), evictions.end(),
+                  [](const ResidencyRecord* left, const ResidencyRecord* right) {
+                      return left->last_loaded < right->last_loaded;
+                  });
+        std::size_t needed_count = 0;
+        while (available < model->footprint_bytes && needed_count < evictions.size()) {
+            available += evictions[needed_count]->footprint_bytes;
+            ++needed_count;
+        }
+        if (available < model->footprint_bytes) {
+            return {ModelError::InsufficientMemory, 0};
+        }
+        evictions.resize(needed_count);
+    } else {
+        evictions.clear();
+    }
+
+    std::vector<ResidencyRecord*> released;
+    released.reserve(evictions.size());
+    for (auto* record : evictions) {
+        const auto result = resources_.release(reservation_name(record->id));
+        if (!result.ok()) {
+            for (auto* prior : released) {
+                (void)resources_.try_acquire(reservation_name(prior->id),
+                                             prior->footprint_bytes);
+            }
+            return {ModelError::InsufficientMemory, 0};
+        }
+        released.push_back(record);
+    }
+
+    const auto acquired = resources_.try_acquire(reservation_name(model->id),
+                                                 model->footprint_bytes);
+    if (!acquired.ok()) {
+        for (auto* record : released) {
+            (void)resources_.try_acquire(reservation_name(record->id),
+                                         record->footprint_bytes);
+        }
+        return {ModelError::InsufficientMemory, 0};
+    }
+
+    for (auto* record : released) {
+        record->resident = false;
+    }
+    records_.insert_or_assign(model->id,
+                              ResidencyRecord{model->id, model->footprint_bytes,
+                                              model->ref_count, true, ++next_loaded_});
+    return {ModelError::None, model->footprint_bytes};
+}
+
+ModelOperationResult ModelResidencyManager::unload(std::string_view id) {
+    std::lock_guard lock(mutex_);
+    auto models = registry_.models();
+    if (find_model(models, id) == nullptr) {
+        return {ModelError::UnknownModel, 0};
+    }
+    const auto iterator = records_.find(std::string(id));
+    if (iterator == records_.end() || !iterator->second.resident) {
+        return {ModelError::UnknownResidency, 0};
+    }
+    if (iterator->second.ref_count != 0) {
+        return {ModelError::ModelInUse, 0};
+    }
+
+    const auto released = resources_.release(reservation_name(id));
+    if (!released.ok()) {
+        return {ModelError::UnknownResidency, 0};
+    }
+    iterator->second.resident = false;
+    return {ModelError::None, iterator->second.footprint_bytes};
+}
+
+ModelOperationResult ModelResidencyManager::retain(std::string_view id) {
+    std::lock_guard lock(mutex_);
+    auto models = registry_.models();
+    if (find_model(models, id) == nullptr) {
+        return {ModelError::UnknownModel, 0};
+    }
+    const auto iterator = records_.find(std::string(id));
+    if (iterator == records_.end() || !iterator->second.resident) {
+        return {ModelError::UnknownResidency, 0};
+    }
+
+    const auto result = registry_.retain(id);
+    if (result.ok()) {
+        iterator->second.ref_count = result.amount;
+    }
+    return result;
+}
+
+ModelOperationResult ModelResidencyManager::release_model(std::string_view id) {
+    std::lock_guard lock(mutex_);
+    auto models = registry_.models();
+    if (find_model(models, id) == nullptr) {
+        return {ModelError::UnknownModel, 0};
+    }
+    const auto iterator = records_.find(std::string(id));
+    if (iterator == records_.end() || !iterator->second.resident) {
+        return {ModelError::UnknownResidency, 0};
+    }
+
+    const auto result = registry_.release_model(id);
+    if (result.ok()) {
+        iterator->second.ref_count = result.amount;
+    }
+    return result;
+}
+
+ResidencySnapshot ModelResidencyManager::residency() const {
+    std::lock_guard lock(mutex_);
+    ResidencySnapshot snapshot;
+    snapshot.records.reserve(records_.size());
+    for (const auto& [id, record] : records_) {
+        (void)id;
+        snapshot.records.push_back(record);
+    }
+    std::sort(snapshot.records.begin(), snapshot.records.end(),
+              [](const ResidencyRecord& left, const ResidencyRecord& right) {
+                  return left.id < right.id;
+              });
+    return snapshot;
+}
+
+} // namespace gpumemd
