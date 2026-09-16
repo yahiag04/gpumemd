@@ -9,10 +9,6 @@ ModelResidencyManager::ModelResidencyManager(ModelRegistry& registry,
                                              ResourceManager& resources)
     : registry_(registry), resources_(resources) {}
 
-std::string ModelResidencyManager::reservation_name(std::string_view id) {
-    return "model:" + std::string(id);
-}
-
 ModelRecord* ModelResidencyManager::find_model(ModelSnapshot& snapshot, std::string_view id) {
     const auto iterator = std::find_if(snapshot.models.begin(), snapshot.models.end(),
                                        [id](const ModelRecord& model) {
@@ -65,31 +61,18 @@ ModelOperationResult ModelResidencyManager::load(std::string_view id) {
         evictions.clear();
     }
 
-    std::vector<ResidencyRecord*> released;
-    released.reserve(evictions.size());
-    for (auto* record : evictions) {
-        const auto result = resources_.release(reservation_name(record->id));
-        if (!result.ok()) {
-            for (auto* prior : released) {
-                (void)resources_.try_acquire(reservation_name(prior->id),
-                                             prior->footprint_bytes);
-            }
-            return {ModelError::InsufficientMemory, 0};
-        }
-        released.push_back(record);
+    std::vector<std::string> eviction_ids;
+    eviction_ids.reserve(evictions.size());
+    for (const auto* record : evictions) {
+        eviction_ids.push_back(record->id);
     }
-
-    const auto acquired = resources_.try_acquire(reservation_name(model->id),
-                                                 model->footprint_bytes);
+    const auto acquired = resources_.replace_model_reservations(
+        eviction_ids, model->id, model->footprint_bytes);
     if (!acquired.ok()) {
-        for (auto* record : released) {
-            (void)resources_.try_acquire(reservation_name(record->id),
-                                         record->footprint_bytes);
-        }
         return {ModelError::InsufficientMemory, 0};
     }
 
-    for (auto* record : released) {
+    for (auto* record : evictions) {
         record->resident = false;
     }
     records_.insert_or_assign(model->id,
@@ -112,7 +95,7 @@ ModelOperationResult ModelResidencyManager::unload(std::string_view id) {
         return {ModelError::ModelInUse, 0};
     }
 
-    const auto released = resources_.release(reservation_name(id));
+    const auto released = resources_.release_model(id);
     if (!released.ok()) {
         return {ModelError::UnknownResidency, 0};
     }

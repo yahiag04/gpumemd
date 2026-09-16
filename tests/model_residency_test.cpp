@@ -55,15 +55,14 @@ void evicts_oldest_unreferenced_model() {
     assert(resources.status().used == 80);
 }
 
-void failed_load_rolls_back_evictions() {
+void failed_load_leaves_existing_residency_unchanged() {
     ModelRegistry registry;
     ResourceManager resources(100);
     ModelResidencyManager residency(registry, resources);
     assert(registry.register_model("a", 40, "a").ok());
-    assert(registry.register_model("b", 40, "b").ok());
+    assert(registry.register_model("b", 80, "b").ok());
     assert(residency.load("a").ok());
     assert(resources.try_acquire("filler", 30).ok());
-    assert(resources.try_acquire("model:b", 10).ok());
 
     const auto result = residency.load("b");
     assert(result.error == ModelError::InsufficientMemory);
@@ -71,7 +70,11 @@ void failed_load_rolls_back_evictions() {
     assert(snapshot.records.size() == 1);
     assert(snapshot.records[0].id == "a");
     assert(snapshot.records[0].resident);
-    assert(resources.status().used == 80);
+    const auto status = resources.status();
+    assert(status.used == 70);
+    assert(status.reservations.size() == 2);
+    assert(status.reservations[0].name == "filler");
+    assert(status.reservations[1].name == "model:a");
 }
 
 void rejects_unknown_and_nonresident_operations() {
@@ -192,7 +195,7 @@ int main() {
     loads_and_unloads_once();
     referenced_model_cannot_unload();
     evicts_oldest_unreferenced_model();
-    failed_load_rolls_back_evictions();
+    failed_load_leaves_existing_residency_unchanged();
     rejects_unknown_and_nonresident_operations();
     rejects_oversized_footprint_without_evicting();
     rejects_release_underflow();

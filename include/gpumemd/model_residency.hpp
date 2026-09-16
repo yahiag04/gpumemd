@@ -35,7 +35,6 @@ public:
     [[nodiscard]] ResidencySnapshot residency() const;
 
 private:
-    [[nodiscard]] static std::string reservation_name(std::string_view id);
     [[nodiscard]] ModelRecord* find_model(ModelSnapshot& snapshot, std::string_view id);
 
     ModelRegistry& registry_;

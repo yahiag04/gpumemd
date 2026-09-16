@@ -74,6 +74,8 @@ void failed_operations_do_not_change_state() {
     assert(!result.ok() && result.error == ErrorCode::UnknownClient);
     result = manager.acquire("bad/name", 1);
     assert(!result.ok() && result.error == ErrorCode::InvalidName);
+    result = manager.acquire("model:foo", 1);
+    assert(!result.ok() && result.error == ErrorCode::InvalidName);
     result = manager.acquire(std::string(65, 'x'), 1);
     assert(!result.ok() && result.error == ErrorCode::InvalidName);
 
@@ -84,6 +86,39 @@ void failed_operations_do_not_change_state() {
     assert(after.reservations.size() == before.reservations.size());
     assert(after.reservations[0].name == before.reservations[0].name);
     assert(after.reservations[0].bytes == before.reservations[0].bytes);
+}
+
+void client_and_model_reservations_use_separate_namespaces() {
+    ResourceManager manager(100);
+    assert(manager.try_acquire("foo", 20).ok());
+    assert(manager.acquire_model("foo", 30).ok());
+
+    const auto snapshot = manager.status();
+    assert(snapshot.used == 50);
+    assert(snapshot.reservations.size() == 2);
+    assert(snapshot.reservations[0].name == "foo");
+    assert(snapshot.reservations[0].bytes == 20);
+    assert(snapshot.reservations[1].name == "model:foo");
+    assert(snapshot.reservations[1].bytes == 30);
+}
+
+void failed_model_replacement_is_atomic() {
+    ResourceManager manager(100);
+    assert(manager.acquire_model("old", 60).ok());
+    assert(manager.try_acquire("client", 40).ok());
+    const auto before = manager.status();
+
+    const auto result = manager.replace_model_reservations({"old"}, "new", 70);
+    assert(!result.ok() && result.error == ErrorCode::InsufficientMemory);
+
+    const auto after = manager.status();
+    assert(after.used == before.used);
+    assert(after.free == before.free);
+    assert(after.reservations.size() == before.reservations.size());
+    assert(after.reservations[0].name == before.reservations[0].name);
+    assert(after.reservations[0].bytes == before.reservations[0].bytes);
+    assert(after.reservations[1].name == before.reservations[1].name);
+    assert(after.reservations[1].bytes == before.reservations[1].bytes);
 }
 
 void boundary_capacity_is_overflow_safe() {
@@ -258,6 +293,8 @@ int main() {
     constructor_rejects_zero_capacity();
     acquire_release_and_status_are_consistent();
     failed_operations_do_not_change_state();
+    client_and_model_reservations_use_separate_namespaces();
+    failed_model_replacement_is_atomic();
     boundary_capacity_is_overflow_safe();
     concurrent_acquire_and_release_preserve_accounting();
     try_acquire_is_immediate();

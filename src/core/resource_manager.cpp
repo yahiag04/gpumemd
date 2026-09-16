@@ -13,17 +13,14 @@ ResourceManager::ResourceManager(Bytes capacity) : capacity_(capacity) {
 }
 
 bool ResourceManager::valid_name(std::string_view name) noexcept {
-    const bool model_reservation = name.starts_with("model:");
-    const std::size_t maximum_size = model_reservation ? 70 : 64;
-    if (name.empty() || name.size() > maximum_size) {
+    if (name.empty() || name.size() > 64) {
         return false;
     }
-    return std::all_of(name.begin(), name.end(), [model_reservation](char character) {
+    return std::all_of(name.begin(), name.end(), [](char character) {
         const bool letter = (character >= 'a' && character <= 'z') ||
                             (character >= 'A' && character <= 'Z');
         const bool digit = character >= '0' && character <= '9';
-        return letter || digit || character == '_' || character == '-' || character == '.' ||
-               (model_reservation && character == ':');
+        return letter || digit || character == '_' || character == '-' || character == '.';
     });
 }
 
@@ -186,6 +183,80 @@ OperationResult ResourceManager::release(std::string_view name) {
     return {ErrorCode::None, bytes};
 }
 
+OperationResult ResourceManager::acquire_model(std::string_view id, Bytes bytes) {
+    if (!valid_name(id)) {
+        return {ErrorCode::InvalidName, 0};
+    }
+    if (bytes == 0) {
+        return {ErrorCode::InvalidSize, 0};
+    }
+
+    std::lock_guard lock(mutex_);
+    if (model_reservations_.contains(std::string(id))) {
+        return {ErrorCode::DuplicateClient, 0};
+    }
+    if (bytes > capacity_ - used_) {
+        return {ErrorCode::InsufficientMemory, 0};
+    }
+    model_reservations_.emplace(std::string(id), bytes);
+    used_ += bytes;
+    return {ErrorCode::None, bytes};
+}
+
+OperationResult ResourceManager::release_model(std::string_view id) {
+    if (!valid_name(id)) {
+        return {ErrorCode::InvalidName, 0};
+    }
+
+    std::lock_guard lock(mutex_);
+    const auto iterator = model_reservations_.find(std::string(id));
+    if (iterator == model_reservations_.end()) {
+        return {ErrorCode::UnknownClient, 0};
+    }
+    const Bytes bytes = iterator->second;
+    model_reservations_.erase(iterator);
+    used_ -= bytes;
+    grant_waiters_locked(Clock::now());
+    return {ErrorCode::None, bytes};
+}
+
+OperationResult ResourceManager::replace_model_reservations(
+    const std::vector<std::string>& evictions, std::string_view id, Bytes bytes) {
+    if (!valid_name(id)) {
+        return {ErrorCode::InvalidName, 0};
+    }
+    if (bytes == 0) {
+        return {ErrorCode::InvalidSize, 0};
+    }
+
+    std::lock_guard lock(mutex_);
+    if (model_reservations_.contains(std::string(id))) {
+        return {ErrorCode::DuplicateClient, 0};
+    }
+
+    Bytes evicted_bytes = 0;
+    for (const auto& eviction : evictions) {
+        const auto iterator = model_reservations_.find(eviction);
+        if (iterator == model_reservations_.end()) {
+            return {ErrorCode::UnknownClient, 0};
+        }
+        evicted_bytes += iterator->second;
+    }
+    if (bytes > capacity_ - used_ + evicted_bytes) {
+        return {ErrorCode::InsufficientMemory, 0};
+    }
+
+    for (const auto& eviction : evictions) {
+        const auto iterator = model_reservations_.find(eviction);
+        used_ -= iterator->second;
+        model_reservations_.erase(iterator);
+    }
+    model_reservations_.emplace(std::string(id), bytes);
+    used_ += bytes;
+    grant_waiters_locked(Clock::now());
+    return {ErrorCode::None, bytes};
+}
+
 void ResourceManager::cancel_waiters() noexcept {
     std::lock_guard lock(mutex_);
     for (const auto& request : pending_) {
@@ -202,6 +273,9 @@ StatusSnapshot ResourceManager::status() const {
     snapshot.reservations.reserve(reservations_.size());
     for (const auto& [name, bytes] : reservations_) {
         snapshot.reservations.push_back({name, bytes});
+    }
+    for (const auto& [id, bytes] : model_reservations_) {
+        snapshot.reservations.push_back({"model:" + id, bytes});
     }
     std::sort(snapshot.reservations.begin(), snapshot.reservations.end(),
               [](const Reservation& left, const Reservation& right) {
