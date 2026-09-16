@@ -77,7 +77,7 @@ void failed_load_leaves_existing_residency_unchanged() {
     assert(status.reservations[1].name == "model:a");
 }
 
-void rejects_unknown_and_nonresident_operations() {
+void supports_references_for_nonresident_models() {
     ModelRegistry registry;
     ResourceManager resources(100);
     ModelResidencyManager residency(registry, resources);
@@ -88,8 +88,36 @@ void rejects_unknown_and_nonresident_operations() {
     assert(residency.retain("missing").error == ModelError::UnknownModel);
     assert(residency.release_model("missing").error == ModelError::UnknownModel);
     assert(residency.unload("known").error == ModelError::UnknownResidency);
-    assert(residency.retain("known").error == ModelError::UnknownResidency);
-    assert(residency.release_model("known").error == ModelError::UnknownResidency);
+    assert(residency.retain("known").amount == 1);
+    auto snapshot = residency.residency();
+    assert(snapshot.records.size() == 1);
+    assert(snapshot.records[0].id == "known");
+    assert(!snapshot.records[0].resident);
+    assert(snapshot.records[0].ref_count == 1);
+    assert(residency.release_model("known").amount == 0);
+    snapshot = residency.residency();
+    assert(snapshot.records[0].ref_count == 0);
+    assert(resources.status().used == 0);
+}
+
+void unregister_rejects_resident_and_erases_nonresident_record() {
+    ModelRegistry registry;
+    ResourceManager resources(100);
+    ModelResidencyManager residency(registry, resources);
+    assert(registry.register_model("loaded", 40, "loaded").ok());
+    assert(registry.register_model("cold", 20, "cold").ok());
+    assert(residency.load("loaded").ok());
+    assert(residency.retain("cold").ok());
+    assert(residency.release_model("cold").ok());
+
+    assert(residency.unregister_model("loaded").error == ModelError::ModelInUse);
+    assert(registry.models().models.size() == 2);
+    assert(resources.status().used == 40);
+    assert(residency.unregister_model("cold").ok());
+    assert(registry.models().models.size() == 1);
+    const auto snapshot = residency.residency();
+    assert(snapshot.records.size() == 1);
+    assert(snapshot.records[0].id == "loaded");
 }
 
 void rejects_oversized_footprint_without_evicting() {
@@ -196,7 +224,8 @@ int main() {
     referenced_model_cannot_unload();
     evicts_oldest_unreferenced_model();
     failed_load_leaves_existing_residency_unchanged();
-    rejects_unknown_and_nonresident_operations();
+    supports_references_for_nonresident_models();
+    unregister_rejects_resident_and_erases_nonresident_record();
     rejects_oversized_footprint_without_evicting();
     rejects_release_underflow();
     reserves_the_full_logical_model_label();

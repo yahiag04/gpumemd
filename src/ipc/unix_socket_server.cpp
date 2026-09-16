@@ -67,7 +67,7 @@ std::string dispatch(ResourceManager& manager, ModelRegistry& registry,
             registry.register_model(command.name, command.bytes, command.metadata));
     case CommandType::UnregisterModel:
         return format_model_operation_result("unregistered", command.name,
-                                             registry.unregister_model(command.name));
+                                             residency.unregister_model(command.name));
     case CommandType::RetainModel:
         return format_model_operation_result("retained", command.name,
                                              residency.retain(command.name));
