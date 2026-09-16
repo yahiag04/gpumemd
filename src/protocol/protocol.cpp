@@ -174,6 +174,13 @@ ParseResult parse_command(std::string_view line) {
         return {ParseError::None, {CommandType::Models}};
     }
 
+    if (tokens[0] == "residency") {
+        if (tokens.size() != 1) {
+            return error(ParseError::InvalidRequest);
+        }
+        return {ParseError::None, {CommandType::Residency}};
+    }
+
     if (tokens[0] == "register") {
         if (tokens.size() != 4) {
             return error(ParseError::InvalidRequest);
@@ -197,17 +204,24 @@ ParseResult parse_command(std::string_view line) {
     }
 
     if (tokens[0] == "unregister" || tokens[0] == "retain" ||
-        tokens[0] == "release_model") {
+        tokens[0] == "release_model" || tokens[0] == "load" ||
+        tokens[0] == "unload") {
         if (tokens.size() != 2) {
             return error(ParseError::InvalidRequest);
         }
         if (!valid_name(tokens[1])) {
             return error(ParseError::InvalidModelId);
         }
-        const CommandType type = tokens[0] == "unregister"
-                                     ? CommandType::UnregisterModel
-                                     : tokens[0] == "retain" ? CommandType::RetainModel
-                                                              : CommandType::ReleaseModel;
+        CommandType type = CommandType::ReleaseModel;
+        if (tokens[0] == "unregister") {
+            type = CommandType::UnregisterModel;
+        } else if (tokens[0] == "retain") {
+            type = CommandType::RetainModel;
+        } else if (tokens[0] == "load") {
+            type = CommandType::LoadModel;
+        } else if (tokens[0] == "unload") {
+            type = CommandType::UnloadModel;
+        }
         Command command;
         command.type = type;
         command.name = std::string(tokens[1]);
@@ -358,6 +372,10 @@ std::string format_model_operation_result(std::string_view action,
         return "ERR model_in_use model is in use\n";
     case ModelError::RefcountUnderflow:
         return "ERR refcount_underflow model reference count is already zero\n";
+    case ModelError::UnknownResidency:
+        return "ERR unknown_residency model is not resident\n";
+    case ModelError::InsufficientMemory:
+        return "ERR insufficient_memory insufficient memory for model\n";
     case ModelError::None:
         break;
     }
@@ -371,6 +389,23 @@ std::string format_models(const ModelSnapshot& snapshot) {
         output << "MODEL " << model.id << ' ' << model.metadata << ' '
                << model.footprint_bytes << ' ' << model.ref_count << ' '
                << model.last_access << '\n';
+    }
+    output << "END\n";
+    return output.str();
+}
+
+std::string format_residency_operation_result(std::string_view action,
+                                              std::string_view name,
+                                              const ModelOperationResult& result) {
+    return format_model_operation_result(action, name, result);
+}
+
+std::string format_residency(const ResidencySnapshot& snapshot) {
+    std::ostringstream output;
+    output << "OK residency " << snapshot.records.size() << '\n';
+    for (const auto& record : snapshot.records) {
+        output << "RESIDENT " << record.id << ' ' << record.footprint_bytes << ' '
+               << record.ref_count << ' ' << record.last_loaded << '\n';
     }
     output << "END\n";
     return output.str();
