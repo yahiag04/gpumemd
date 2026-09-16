@@ -258,6 +258,15 @@ void formats_empty_and_loaded_residency() {
            "OK residency 1\nRESIDENT bert 7000000000 0 1\nEND\n");
 }
 
+void excludes_nonresident_models_from_residency() {
+    ResidencySnapshot snapshot{{
+        {"bert", 7000000000, 2, true, 3},
+        {"evicted", 4000000000, 0, false, 1},
+    }};
+    assert(format_residency(snapshot) ==
+           "OK residency 1\nRESIDENT bert 7000000000 2 3\nEND\n");
+}
+
 int main() {
     parses_supported_commands_and_units();
     rejects_malformed_commands();
@@ -272,4 +281,5 @@ int main() {
     parses_residency_commands();
     formats_residency_operation_responses();
     formats_empty_and_loaded_residency();
+    excludes_nonresident_models_from_residency();
 }

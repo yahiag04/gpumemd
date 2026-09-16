@@ -402,8 +402,14 @@ std::string format_residency_operation_result(std::string_view action,
 
 std::string format_residency(const ResidencySnapshot& snapshot) {
     std::ostringstream output;
-    output << "OK residency " << snapshot.records.size() << '\n';
+    const auto resident_count = std::count_if(
+        snapshot.records.begin(), snapshot.records.end(),
+        [](const ResidencyRecord& record) { return record.resident; });
+    output << "OK residency " << resident_count << '\n';
     for (const auto& record : snapshot.records) {
+        if (!record.resident) {
+            continue;
+        }
         output << "RESIDENT " << record.id << ' ' << record.footprint_bytes << ' '
                << record.ref_count << ' ' << record.last_loaded << '\n';
     }
