@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gpumemd/model_registry.hpp"
+#include "gpumemd/model_residency.hpp"
 #include "gpumemd/resource_manager.hpp"
 
 #include <atomic>
@@ -12,7 +13,7 @@ namespace gpumemd {
 class UnixSocketServer final {
 public:
     UnixSocketServer(ResourceManager& manager, ModelRegistry& registry,
-                     std::string socket_path);
+                     ModelResidencyManager& residency, std::string socket_path);
     ~UnixSocketServer();
 
     UnixSocketServer(const UnixSocketServer&) = delete;
@@ -25,6 +26,7 @@ public:
 private:
     ResourceManager& manager_;
     ModelRegistry& registry_;
+    ModelResidencyManager& residency_;
     std::string socket_path_;
     std::atomic<bool> stop_requested_{false};
     int listen_fd_{-1};
