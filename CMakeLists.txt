@@ -8,6 +8,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Hardware-independent resource accounting lives in this library.
 add_library(gpumemd_core STATIC
     src/core/model_registry.cpp
+    src/core/model_residency.cpp
     src/core/resource_manager.cpp
 )
 target_include_directories(gpumemd_core PUBLIC
@@ -59,6 +60,14 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME model_registry COMMAND model_registry_test)
     set_tests_properties(model_registry PROPERTIES TIMEOUT 10)
+
+    add_executable(model_residency_test tests/model_residency_test.cpp)
+    target_link_libraries(model_residency_test PRIVATE gpumemd_core)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(model_residency_test PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME model_residency COMMAND model_residency_test)
+    set_tests_properties(model_residency PROPERTIES TIMEOUT 10)
 
     add_executable(protocol_test tests/protocol_test.cpp)
     target_link_libraries(protocol_test PRIVATE gpumemd_protocol)

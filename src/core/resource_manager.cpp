@@ -13,14 +13,17 @@ ResourceManager::ResourceManager(Bytes capacity) : capacity_(capacity) {
 }
 
 bool ResourceManager::valid_name(std::string_view name) noexcept {
-    if (name.empty() || name.size() > 64) {
+    const bool model_reservation = name.starts_with("model:");
+    const std::size_t maximum_size = model_reservation ? 70 : 64;
+    if (name.empty() || name.size() > maximum_size) {
         return false;
     }
-    return std::all_of(name.begin(), name.end(), [](char character) {
+    return std::all_of(name.begin(), name.end(), [model_reservation](char character) {
         const bool letter = (character >= 'a' && character <= 'z') ||
                             (character >= 'A' && character <= 'Z');
         const bool digit = character >= '0' && character <= '9';
-        return letter || digit || character == '_' || character == '-' || character == '.';
+        return letter || digit || character == '_' || character == '-' || character == '.' ||
+               (model_reservation && character == ':');
     });
 }
 
