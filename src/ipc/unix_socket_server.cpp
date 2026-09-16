@@ -27,7 +27,8 @@ struct Client {
     std::string input;
 };
 
-bool process_input(Client& client, ResourceManager& manager, ModelRegistry& registry);
+bool process_input(Client& client, ResourceManager& manager, ModelRegistry& registry,
+                   ModelResidencyManager& residency);
 
 bool send_all(int fd, const std::string& response) noexcept {
     std::size_t sent = 0;
@@ -45,7 +46,7 @@ bool send_all(int fd, const std::string& response) noexcept {
 }
 
 std::string dispatch(ResourceManager& manager, ModelRegistry& registry,
-                     const Command& command) {
+                     ModelResidencyManager& residency, const Command& command) {
     switch (command.type) {
     case CommandType::Acquire:
         if (command.acquire_mode == AcquireMode::Try) {
@@ -69,17 +70,26 @@ std::string dispatch(ResourceManager& manager, ModelRegistry& registry,
                                              registry.unregister_model(command.name));
     case CommandType::RetainModel:
         return format_model_operation_result("retained", command.name,
-                                             registry.retain(command.name));
+                                             residency.retain(command.name));
     case CommandType::ReleaseModel:
         return format_model_operation_result("released_model", command.name,
-                                             registry.release_model(command.name));
+                                             residency.release_model(command.name));
     case CommandType::Models:
         return format_models(registry.models());
+    case CommandType::LoadModel:
+        return format_residency_operation_result("loaded", command.name,
+                                                 residency.load(command.name));
+    case CommandType::UnloadModel:
+        return format_residency_operation_result("unloaded", command.name,
+                                                 residency.unload(command.name));
+    case CommandType::Residency:
+        return format_residency(residency.residency());
     }
     return "ERR internal_error unknown command type\n";
 }
 
 void client_session(int fd, ResourceManager& manager, ModelRegistry& registry,
+                    ModelResidencyManager& residency,
                     const std::atomic<bool>& stop_requested) {
     timeval timeout{0, 100'000};
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
@@ -89,7 +99,7 @@ void client_session(int fd, ResourceManager& manager, ModelRegistry& registry,
         const ssize_t count = read(fd, buffer, sizeof(buffer));
         if (count > 0) {
             client.input.append(buffer, static_cast<std::size_t>(count));
-            if (!process_input(client, manager, registry)) {
+            if (!process_input(client, manager, registry, residency)) {
                 break;
             }
         } else if (count == 0) {
@@ -106,7 +116,8 @@ void client_session(int fd, ResourceManager& manager, ModelRegistry& registry,
     close(fd);
 }
 
-bool process_input(Client& client, ResourceManager& manager, ModelRegistry& registry) {
+bool process_input(Client& client, ResourceManager& manager, ModelRegistry& registry,
+                   ModelResidencyManager& residency) {
     while (true) {
         const std::size_t newline = client.input.find('\n');
         if (newline == std::string::npos) {
@@ -132,7 +143,8 @@ bool process_input(Client& client, ResourceManager& manager, ModelRegistry& regi
 
         const ParseResult parsed = parse_command(line);
         const std::string response = parsed.ok()
-                                          ? dispatch(manager, registry, parsed.command)
+                                          ? dispatch(manager, registry, residency,
+                                                     parsed.command)
                                           : format_parse_error(parsed.error);
         if (!send_all(client.fd, response)) {
             return false;
@@ -143,8 +155,10 @@ bool process_input(Client& client, ResourceManager& manager, ModelRegistry& regi
 } // namespace
 
 UnixSocketServer::UnixSocketServer(ResourceManager& manager, ModelRegistry& registry,
+                                   ModelResidencyManager& residency,
                                    std::string socket_path)
-    : manager_(manager), registry_(registry), socket_path_(std::move(socket_path)) {}
+    : manager_(manager), registry_(registry), residency_(residency),
+      socket_path_(std::move(socket_path)) {}
 
 UnixSocketServer::~UnixSocketServer() {
     request_shutdown();
@@ -218,7 +232,8 @@ int UnixSocketServer::run(const std::function<bool()>& external_stop) {
             const int client_fd = accept(listen_fd_, nullptr, nullptr);
             if (client_fd >= 0) {
                 workers.emplace_back(client_session, client_fd, std::ref(manager_),
-                                     std::ref(registry_), std::cref(stop_requested_));
+                                     std::ref(registry_), std::ref(residency_),
+                                     std::cref(stop_requested_));
             }
         }
     }
