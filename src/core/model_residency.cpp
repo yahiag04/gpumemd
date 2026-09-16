@@ -106,17 +106,19 @@ ModelOperationResult ModelResidencyManager::unload(std::string_view id) {
 ModelOperationResult ModelResidencyManager::retain(std::string_view id) {
     std::lock_guard lock(mutex_);
     auto models = registry_.models();
-    if (find_model(models, id) == nullptr) {
+    const auto* model = find_model(models, id);
+    if (model == nullptr) {
         return {ModelError::UnknownModel, 0};
-    }
-    const auto iterator = records_.find(std::string(id));
-    if (iterator == records_.end() || !iterator->second.resident) {
-        return {ModelError::UnknownResidency, 0};
     }
 
     const auto result = registry_.retain(id);
     if (result.ok()) {
-        iterator->second.ref_count = result.amount;
+        const auto [iterator, inserted] = records_.try_emplace(
+            model->id, ResidencyRecord{model->id, model->footprint_bytes,
+                                       result.amount, false, 0});
+        if (!inserted) {
+            iterator->second.ref_count = result.amount;
+        }
     }
     return result;
 }
@@ -124,17 +126,33 @@ ModelOperationResult ModelResidencyManager::retain(std::string_view id) {
 ModelOperationResult ModelResidencyManager::release_model(std::string_view id) {
     std::lock_guard lock(mutex_);
     auto models = registry_.models();
-    if (find_model(models, id) == nullptr) {
+    const auto* model = find_model(models, id);
+    if (model == nullptr) {
         return {ModelError::UnknownModel, 0};
-    }
-    const auto iterator = records_.find(std::string(id));
-    if (iterator == records_.end() || !iterator->second.resident) {
-        return {ModelError::UnknownResidency, 0};
     }
 
     const auto result = registry_.release_model(id);
     if (result.ok()) {
-        iterator->second.ref_count = result.amount;
+        const auto [iterator, inserted] = records_.try_emplace(
+            model->id, ResidencyRecord{model->id, model->footprint_bytes,
+                                       result.amount, false, 0});
+        if (!inserted) {
+            iterator->second.ref_count = result.amount;
+        }
+    }
+    return result;
+}
+
+ModelOperationResult ModelResidencyManager::unregister_model(std::string_view id) {
+    std::lock_guard lock(mutex_);
+    const auto iterator = records_.find(std::string(id));
+    if (iterator != records_.end() && iterator->second.resident) {
+        return {ModelError::ModelInUse, 0};
+    }
+
+    const auto result = registry_.unregister_model(id);
+    if (result.ok()) {
+        records_.erase(std::string(id));
     }
     return result;
 }

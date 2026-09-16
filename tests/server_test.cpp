@@ -168,7 +168,7 @@ void blocked_acquire_does_not_stop_other_clients() {
 void serves_model_registry_without_changing_resource_status() {
     const std::string path = socket_path();
     unlink(path.c_str());
-    gpumemd::ResourceManager manager(10'000'000'000);
+    gpumemd::ResourceManager manager(10'000);
     gpumemd::ModelRegistry registry;
     gpumemd::ModelResidencyManager residency(registry, manager);
     gpumemd::UnixSocketServer server(manager, registry, residency, path);
@@ -178,9 +178,8 @@ void serves_model_registry_without_changing_resource_status() {
     assert(request(client, "register bert 7GB bert-base") ==
            "OK registered bert 7000000000\n");
     assert(request(client, "status", true) ==
-           "OK status 10000000000 0 10000000000 0\n"
+           "OK status 10000 0 10000 0\n"
            "END\n");
-    assert(request(client, "load bert") == "OK loaded bert 7000000000\n");
     assert(request(client, "retain bert") == "OK retained bert 1\n");
     assert(request(client, "models", true) ==
            "OK models 1\n"
@@ -188,9 +187,38 @@ void serves_model_registry_without_changing_resource_status() {
            "END\n");
     assert(request(client, "release_model bert") ==
            "OK released_model bert 0\n");
-    assert(request(client, "unload bert") == "OK unloaded bert 7000000000\n");
     assert(request(client, "unregister bert") ==
            "OK unregistered bert 0\n");
+    close(client);
+
+    server.request_shutdown();
+    server_thread.join();
+    assert(access(path.c_str(), F_OK) != 0);
+}
+
+void refuses_to_unregister_a_resident_model() {
+    const std::string path = socket_path();
+    unlink(path.c_str());
+    gpumemd::ResourceManager manager(100);
+    gpumemd::ModelRegistry registry;
+    gpumemd::ModelResidencyManager residency(registry, manager);
+    gpumemd::UnixSocketServer server(manager, registry, residency, path);
+    std::thread server_thread([&] { server.run(); });
+
+    const int client = connect_to(path);
+    assert(request(client, "register loaded 40 metadata") ==
+           "OK registered loaded 40\n");
+    assert(request(client, "load loaded") == "OK loaded loaded 40\n");
+    assert(request(client, "unregister loaded") ==
+           "ERR model_in_use model is in use\n");
+    assert(request(client, "status", true) ==
+           "OK status 100 40 60 1\n"
+           "CLIENT model:loaded 40\n"
+           "END\n");
+    assert(request(client, "residency", true) ==
+           "OK residency 1\n"
+           "RESIDENT loaded 40 0 1\n"
+           "END\n");
     close(client);
 
     server.request_shutdown();
@@ -237,5 +265,6 @@ int main() {
     reports_parse_and_accounting_errors();
     blocked_acquire_does_not_stop_other_clients();
     serves_model_registry_without_changing_resource_status();
+    refuses_to_unregister_a_resident_model();
     serves_model_residency_and_reflects_allocations_in_status();
 }

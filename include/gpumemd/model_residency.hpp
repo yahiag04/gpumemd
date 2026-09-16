@@ -32,6 +32,7 @@ public:
     [[nodiscard]] ModelOperationResult unload(std::string_view id);
     [[nodiscard]] ModelOperationResult retain(std::string_view id);
     [[nodiscard]] ModelOperationResult release_model(std::string_view id);
+    [[nodiscard]] ModelOperationResult unregister_model(std::string_view id);
     [[nodiscard]] ResidencySnapshot residency() const;
 
 private:
