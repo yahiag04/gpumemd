@@ -99,7 +99,8 @@ int main(int argc, char* argv[]) {
     char buffer[4096];
     bool response_complete = false;
     const bool multiline = parsed.command.type == gpumemd::CommandType::Status ||
-                           parsed.command.type == gpumemd::CommandType::Models;
+                           parsed.command.type == gpumemd::CommandType::Models ||
+                           parsed.command.type == gpumemd::CommandType::Residency;
     while (true) {
         const ssize_t count = read(fd, buffer, sizeof(buffer));
         if (count > 0) {
