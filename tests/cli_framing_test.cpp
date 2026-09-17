@@ -110,6 +110,41 @@ void fragmented_models_response_is_read_through_end(const std::string& executabl
     assert(result.output == expected);
 }
 
+void fragmented_oversized_residency_response_is_read_through_end(
+    const std::string& executable, const std::string& path) {
+    unlink(path.c_str());
+    const int listener = create_listener(path);
+
+    std::string expected = "OK residency 180\n";
+    for (int index = 0; index < 180; ++index) {
+        expected += "RESIDENT model" + std::to_string(index) +
+                    " 123456789 0 123456789\n";
+    }
+    expected += "END\n";
+    assert(expected.size() > 4096);
+
+    std::thread server([&] {
+        const int client = accept(listener, nullptr, nullptr);
+        assert(client >= 0);
+        char command[64];
+        assert(read(client, command, sizeof(command)) > 0);
+        const std::size_t first_newline = expected.find('\n') + 1;
+        write_all(client, expected.substr(0, first_newline));
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        for (std::size_t offset = first_newline; offset < expected.size(); offset += 701) {
+            write_all(client, expected.substr(offset, 701));
+        }
+        close(client);
+    });
+
+    const ClientResult result = run_client(executable, path, "residency");
+    server.join();
+    close(listener);
+    unlink(path.c_str());
+    assert(result.exit_code == 0);
+    assert(result.output == expected);
+}
+
 void eof_before_status_end_is_an_error(const std::string& executable,
                                        const std::string& path) {
     const int listener = create_listener(path);
@@ -122,6 +157,24 @@ void eof_before_status_end_is_an_error(const std::string& executable,
         close(client);
     });
     const ClientResult result = run_client(executable, path, "status");
+    server.join();
+    close(listener);
+    unlink(path.c_str());
+    assert(result.exit_code != 0);
+}
+
+void eof_before_residency_end_is_an_error(const std::string& executable,
+                                          const std::string& path) {
+    const int listener = create_listener(path);
+    std::thread server([&] {
+        const int client = accept(listener, nullptr, nullptr);
+        assert(client >= 0);
+        char command[64];
+        assert(read(client, command, sizeof(command)) > 0);
+        write_all(client, "OK residency 1\nRESIDENT bert 20 0 1\n");
+        close(client);
+    });
+    const ClientResult result = run_client(executable, path, "residency");
     server.join();
     close(listener);
     unlink(path.c_str());
@@ -156,6 +209,8 @@ int main(int argc, char* argv[]) {
     std::signal(SIGPIPE, SIG_IGN);
     const std::string path = socket_path();
     fragmented_models_response_is_read_through_end(argv[1], path);
+    fragmented_oversized_residency_response_is_read_through_end(argv[1], path);
     eof_before_status_end_is_an_error(argv[1], path);
+    eof_before_residency_end_is_an_error(argv[1], path);
     error_response_returns_before_eof(argv[1], path);
 }
