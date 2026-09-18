@@ -3,7 +3,7 @@
 A simulated GPU resource and model-residency broker being built incrementally
 in modern C++, with no CUDA or Metal dependency yet.
 
-**Current state: v0.15 implemented.** CMake builds the daemon, the independent
+**Current state: v0.16 implemented.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
@@ -35,6 +35,9 @@ unreferenced models for eviction.
 The v0.15 daemon includes a thread-safe remote-node registry exposed through
 `node_register`, `node_remove`, and `nodes`; it tracks endpoint, capacity,
 usage, and health while leaving transport/replication to a later extension.
+The v0.16 `gpumemd_client` library provides a C++ API for applications to issue
+resource and residency requests over the Unix socket without reimplementing
+the wire protocol.
 
 ## Build and test
 
@@ -80,6 +83,19 @@ In another terminal, use the client:
 ./build/gpumemctl --socket /tmp/gpumemd.sock release_model bert
 ./build/gpumemctl --socket /tmp/gpumemd.sock unload bert
 ./build/gpumemctl --socket /tmp/gpumemd.sock unregister bert
+```
+
+Applications can use the C++ client library instead of invoking the CLI:
+
+```cpp
+#include "gpumemd/client.hpp"
+
+gpumemd::Client client("/tmp/gpumemd.sock");
+auto acquired = client.acquire("worker", 4ULL * 1000 * 1000 * 1000);
+if (!acquired.ok()) {
+    // acquired.payload contains the broker error when available.
+}
+client.release("worker");
 ```
 
 `gpumemctl` returns a non-zero status for broker or command errors.
