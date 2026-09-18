@@ -3,7 +3,7 @@
 A simulated GPU resource and model-residency broker being built incrementally
 in modern C++, with no CUDA or Metal dependency yet.
 
-**Current state: v0.16 implemented.** CMake builds the daemon, the independent
+**Current state: v0.17 implemented.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
@@ -38,6 +38,9 @@ usage, and health while leaving transport/replication to a later extension.
 The v0.16 `gpumemd_client` library provides a C++ API for applications to issue
 resource and residency requests over the Unix socket without reimplementing
 the wire protocol.
+The v0.17 CUDA client wrapper combines the `share` request with
+`cudaIpcOpenMemHandle` and closes the imported allocation automatically through
+RAII when the wrapper is destroyed.
 
 ## Build and test
 
@@ -96,6 +99,19 @@ if (!acquired.ok()) {
     // acquired.payload contains the broker error when available.
 }
 client.release("worker");
+```
+
+On a CUDA build, a process can import a resident model allocation with:
+
+```cpp
+#include "gpumemd/cuda_client.hpp"
+
+gpumemd::CudaClient client("/tmp/gpumemd.sock");
+auto shared = client.open_model("bert");
+if (shared.ok()) {
+    void* device_pointer = shared.allocation->pointer();
+    // Use device_pointer from CUDA code while the allocation remains alive.
+}
 ```
 
 `gpumemctl` returns a non-zero status for broker or command errors.

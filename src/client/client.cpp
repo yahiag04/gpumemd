@@ -3,6 +3,8 @@
 #include "gpumemd/protocol.hpp"
 
 #include <cerrno>
+#include <charconv>
+#include <cctype>
 #include <cstring>
 #include <sstream>
 
@@ -52,6 +54,29 @@ bool is_multiline(std::string_view command) {
 } // namespace
 
 Client::Client(std::string socket_path) : socket_path_(std::move(socket_path)) {}
+
+std::optional<ShareDescriptor> parse_share_response(std::string_view response) {
+    std::istringstream input{std::string(response)};
+    std::string ok;
+    std::string action;
+    std::string name;
+    std::string bytes_token;
+    std::string token;
+    if (!(input >> ok >> action >> name >> bytes_token >> token) || ok != "OK" ||
+        action != "shared" || token.empty()) {
+        return std::nullopt;
+    }
+    Bytes bytes = 0;
+    const auto parsed = std::from_chars(bytes_token.data(),
+                                        bytes_token.data() + bytes_token.size(), bytes);
+    if (parsed.ec != std::errc{} || parsed.ptr != bytes_token.data() + bytes_token.size()) {
+        return std::nullopt;
+    }
+    for (const char character : token) {
+        if (!std::isxdigit(static_cast<unsigned char>(character))) return std::nullopt;
+    }
+    return ShareDescriptor{bytes, std::move(token)};
+}
 
 ClientResponse Client::request(std::string_view command) const {
     if (command.empty() || command.find('\n') != std::string_view::npos) {
