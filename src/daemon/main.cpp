@@ -1,6 +1,9 @@
 #include "gpumemd/model_registry.hpp"
 #include "gpumemd/model_residency.hpp"
 #include "gpumemd/mock_backend.hpp"
+#if defined(GPUMEMD_HAS_METAL)
+#include "gpumemd/metal_backend.hpp"
+#endif
 #include "gpumemd/protocol.hpp"
 #include "gpumemd/resource_manager.hpp"
 #include "gpumemd/server.hpp"
@@ -8,6 +11,7 @@
 #include <csignal>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -61,8 +65,16 @@ int main(int argc, char* argv[]) {
     try {
         gpumemd::ResourceManager manager(*capacity);
         gpumemd::ModelRegistry registry;
-        gpumemd::MockBackend backend;
-        gpumemd::ModelResidencyManager residency(registry, manager, backend);
+        gpumemd::MockBackend mock_backend;
+        gpumemd::AcceleratorBackend* backend = &mock_backend;
+#if defined(GPUMEMD_HAS_METAL)
+        std::unique_ptr<gpumemd::MetalBackend> metal_backend;
+        if (gpumemd::MetalBackend::is_available()) {
+            metal_backend = std::make_unique<gpumemd::MetalBackend>();
+            backend = metal_backend.get();
+        }
+#endif
+        gpumemd::ModelResidencyManager residency(registry, manager, *backend);
         gpumemd::UnixSocketServer server(manager, registry, residency, socket_path);
         std::signal(SIGINT, handle_signal);
         std::signal(SIGTERM, handle_signal);

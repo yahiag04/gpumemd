@@ -14,6 +14,8 @@ enum class BackendError {
     InvalidSize,
     AlreadyLoaded,
     NotLoaded,
+    DeviceUnavailable,
+    AllocationFailed,
 };
 
 struct BackendOperationResult {
