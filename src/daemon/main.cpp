@@ -1,6 +1,7 @@
 #include "gpumemd/model_registry.hpp"
 #include "gpumemd/model_residency.hpp"
 #include "gpumemd/mock_backend.hpp"
+#include "gpumemd/node_registry.hpp"
 #if defined(GPUMEMD_HAS_CUDA)
 #include "gpumemd/cuda_backend.hpp"
 #endif
@@ -98,7 +99,9 @@ int main(int argc, char* argv[]) {
 #endif
         gpumemd::ModelResidencyManager residency(registry, manager, *backend);
         gpumemd::Metrics metrics;
-        gpumemd::UnixSocketServer server(manager, registry, residency, socket_path, &metrics);
+        gpumemd::NodeRegistry nodes;
+        gpumemd::UnixSocketServer server(manager, registry, residency, socket_path, &metrics,
+                                         &nodes);
         std::signal(SIGINT, handle_signal);
         std::signal(SIGTERM, handle_signal);
         std::signal(SIGPIPE, SIG_IGN);

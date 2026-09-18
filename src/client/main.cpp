@@ -23,7 +23,10 @@ void print_usage(std::ostream& output) {
               "  unload NAME\n"
               "  residency\n"
               "  share NAME\n"
-              "  metrics\n";
+              "  metrics\n"
+              "  node_register ID ENDPOINT CAPACITY\n"
+              "  node_remove ID\n"
+              "  nodes\n";
 }
 
 bool write_all(int fd, std::string_view data) {

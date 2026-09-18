@@ -28,7 +28,7 @@ struct Client {
 };
 
 bool process_input(Client& client, ResourceManager& manager, ModelRegistry& registry,
-                   ModelResidencyManager& residency, Metrics* metrics);
+                   ModelResidencyManager& residency, Metrics* metrics, NodeRegistry* nodes);
 
 bool send_all(int fd, const std::string& response) noexcept {
     std::size_t sent = 0;
@@ -47,7 +47,7 @@ bool send_all(int fd, const std::string& response) noexcept {
 
 std::string dispatch(ResourceManager& manager, ModelRegistry& registry,
                      ModelResidencyManager& residency, const Command& command,
-                     Metrics* metrics) {
+                     Metrics* metrics, NodeRegistry* nodes) {
     switch (command.type) {
     case CommandType::Acquire:
         if (command.acquire_mode == AcquireMode::Try) {
@@ -117,13 +117,27 @@ std::string dispatch(ResourceManager& manager, ModelRegistry& registry,
     case CommandType::Metrics:
         return metrics == nullptr ? "ERR metrics_unavailable metrics are disabled\n"
                                   : format_metrics(metrics->snapshot());
+    case CommandType::RegisterNode:
+        return nodes == nullptr
+                   ? "ERR nodes_unavailable node registry is disabled\n"
+                   : format_node_operation_result(
+                         "node_registered", command.name,
+                         nodes->register_node(command.name, command.path, command.bytes));
+    case CommandType::UnregisterNode:
+        return nodes == nullptr
+                   ? "ERR nodes_unavailable node registry is disabled\n"
+                   : format_node_operation_result("node_removed", command.name,
+                                                  nodes->unregister_node(command.name));
+    case CommandType::Nodes:
+        return nodes == nullptr ? "ERR nodes_unavailable node registry is disabled\n"
+                                : format_nodes(nodes->nodes());
     }
     return "ERR internal_error unknown command type\n";
 }
 
 void client_session(int fd, ResourceManager& manager, ModelRegistry& registry,
                     ModelResidencyManager& residency,
-                    Metrics* metrics,
+                    Metrics* metrics, NodeRegistry* nodes,
                     const std::atomic<bool>& stop_requested) {
     timeval timeout{0, 100'000};
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
@@ -133,7 +147,7 @@ void client_session(int fd, ResourceManager& manager, ModelRegistry& registry,
         const ssize_t count = read(fd, buffer, sizeof(buffer));
         if (count > 0) {
             client.input.append(buffer, static_cast<std::size_t>(count));
-            if (!process_input(client, manager, registry, residency, metrics)) {
+            if (!process_input(client, manager, registry, residency, metrics, nodes)) {
                 break;
             }
         } else if (count == 0) {
@@ -151,7 +165,7 @@ void client_session(int fd, ResourceManager& manager, ModelRegistry& registry,
 }
 
 bool process_input(Client& client, ResourceManager& manager, ModelRegistry& registry,
-                   ModelResidencyManager& residency, Metrics* metrics) {
+                   ModelResidencyManager& residency, Metrics* metrics, NodeRegistry* nodes) {
     while (true) {
         const std::size_t newline = client.input.find('\n');
         if (newline == std::string::npos) {
@@ -178,7 +192,7 @@ bool process_input(Client& client, ResourceManager& manager, ModelRegistry& regi
         const ParseResult parsed = parse_command(line);
         const std::string response = parsed.ok()
                                           ? dispatch(manager, registry, residency,
-                                                     parsed.command, metrics)
+                                                     parsed.command, metrics, nodes)
                                           : format_parse_error(parsed.error);
         if (metrics != nullptr) {
             metrics->record_request(response.starts_with("OK"));
@@ -193,9 +207,9 @@ bool process_input(Client& client, ResourceManager& manager, ModelRegistry& regi
 
 UnixSocketServer::UnixSocketServer(ResourceManager& manager, ModelRegistry& registry,
                                    ModelResidencyManager& residency,
-                                   std::string socket_path, Metrics* metrics)
+                                   std::string socket_path, Metrics* metrics, NodeRegistry* nodes)
     : manager_(manager), registry_(registry), residency_(residency),
-      socket_path_(std::move(socket_path)), metrics_(metrics) {}
+      socket_path_(std::move(socket_path)), metrics_(metrics), nodes_(nodes) {}
 
 UnixSocketServer::~UnixSocketServer() {
     request_shutdown();
@@ -270,7 +284,7 @@ int UnixSocketServer::run(const std::function<bool()>& external_stop) {
             if (client_fd >= 0) {
                 workers.emplace_back(client_session, client_fd, std::ref(manager_),
                                      std::ref(registry_), std::ref(residency_),
-                                     metrics_,
+                                     metrics_, nodes_,
                                      std::cref(stop_requested_));
             }
         }
