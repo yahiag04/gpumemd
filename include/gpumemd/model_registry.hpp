@@ -23,6 +23,10 @@ enum class ModelError {
     UnknownResidency,
     InsufficientMemory,
     BackendFailure,
+    InvalidPath,
+    FileUnavailable,
+    SourceChanged,
+    ReadFailure,
 };
 
 struct ModelOperationResult {
@@ -38,6 +42,7 @@ struct ModelRecord {
     Bytes footprint_bytes{0};
     std::uint64_t ref_count{0};
     std::uint64_t last_access{0};
+    std::string source_path;
 };
 
 struct ModelSnapshot {
@@ -49,6 +54,9 @@ public:
     [[nodiscard]] ModelOperationResult register_model(std::string_view id,
                                                        Bytes footprint_bytes,
                                                        std::string_view metadata);
+    [[nodiscard]] ModelOperationResult register_file(std::string_view id,
+                                                      std::string_view path,
+                                                      std::string_view metadata);
     [[nodiscard]] ModelOperationResult unregister_model(std::string_view id);
     [[nodiscard]] ModelOperationResult retain(std::string_view id);
     [[nodiscard]] ModelOperationResult release_model(std::string_view id);

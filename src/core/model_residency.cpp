@@ -1,6 +1,7 @@
 #include "gpumemd/model_residency.hpp"
 
 #include "gpumemd/mock_backend.hpp"
+#include "gpumemd/model_loader.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -75,7 +76,27 @@ ModelOperationResult ModelResidencyManager::load(std::string_view id) {
         eviction_ids.push_back(record->id);
     }
 
-    const auto loaded = backend_.load(model->id, model->footprint_bytes);
+    ModelLoadResult file_data;
+    BackendOperationResult loaded;
+    if (model->source_path.empty()) {
+        loaded = backend_.load(model->id, model->footprint_bytes);
+    } else {
+        ModelLoader loader;
+        file_data = loader.load(model->source_path, model->footprint_bytes);
+        if (!file_data.ok()) {
+            switch (file_data.error) {
+            case ModelLoadError::Unavailable:
+                return {ModelError::FileUnavailable, 0};
+            case ModelLoadError::SourceChanged:
+                return {ModelError::SourceChanged, 0};
+            case ModelLoadError::ReadFailure:
+                return {ModelError::ReadFailure, 0};
+            case ModelLoadError::None:
+                break;
+            }
+        }
+        loaded = backend_.load(model->id, file_data.data);
+    }
     if (!loaded.ok()) {
         return {ModelError::BackendFailure, 0};
     }

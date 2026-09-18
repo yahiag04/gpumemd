@@ -3,16 +3,16 @@
 A simulated GPU resource and model-residency broker being built incrementally
 in modern C++, with no CUDA or Metal dependency yet.
 
-**Current state: v0.7 implemented.** CMake builds the daemon, the independent
+**Current state: v0.8 implemented.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
 CLI behavior, and Unix socket integration.
 
-v0.7 supports optional NVIDIA CUDA allocations when CMake finds a CUDA compiler
+v0.8 supports optional NVIDIA CUDA allocations when CMake finds a CUDA compiler
 and toolkit. macOS continues to use Metal, and systems without a usable
-accelerator continue to use the mock backend. It does not load model files or
-run model kernels.
+accelerator continue to use the mock backend. It does not parse model formats
+or run model kernels.
 Model footprints and residency consume logical reservations in the daemon's
 configured capacity so residency policy can be exercised without hardware.
 The accelerator boundary is represented by `AcceleratorBackend`; `MockBackend`
@@ -56,6 +56,7 @@ In another terminal, use the client:
 ./build/gpumemctl --socket /tmp/gpumemd.sock release processB
 ./build/gpumemctl --socket /tmp/gpumemd.sock release processC
 ./build/gpumemctl --socket /tmp/gpumemd.sock register bert 7GB bert-base
+./build/gpumemctl --socket /tmp/gpumemd.sock register_file bert /models/bert.bin bert-base
 ./build/gpumemctl --socket /tmp/gpumemd.sock load bert
 ./build/gpumemctl --socket /tmp/gpumemd.sock retain bert
 ./build/gpumemctl --socket /tmp/gpumemd.sock residency
@@ -82,6 +83,12 @@ returns `model_in_use` otherwise. `models` lists records sorted by name with
 their metadata, declared footprint in bytes, reference count, and monotonic
 last-access sequence.
 
+`register_file NAME PATH METADATA` registers a raw binary model file. Its
+footprint is read from the file size, and `load NAME` reads the file and copies
+its bytes into the selected accelerator backend. Paths and metadata are single
+tokens; quoting and whitespace in paths are not supported by the text protocol.
+`models` includes the source path for file-backed records.
+
 `load NAME` explicitly makes a registered model resident and reserves its
 declared footprint under `model:NAME`; `unload NAME` explicitly releases that
 reservation. Loading an already resident model is idempotent. `residency`
@@ -96,10 +103,24 @@ cannot be obtained, the load fails with `insufficient_memory` and preserves
 all existing residency and reservations; failed loads never partially evict
 models.
 
-Footprints are **logical reservations**, not measured allocations or real
-model bytes. v0.4 has no accelerator backend, model-file loading, CUDA/Metal
-integration, or multi-GPU support. Metadata is a single non-empty ASCII token
-of at most 128 bytes; quoting and whitespace are not supported.
+Simulated registrations use logical footprints. File-backed registrations use
+the actual file size and transfer raw bytes, but no model format is parsed.
+Metadata is a single non-empty ASCII token of at most 128 bytes; quoting and
+whitespace are not supported.
+
+## Cold/warm benchmark
+
+Builds include `gpumemd-bench`, which measures file-backed cold loads and
+already-resident warm loads:
+
+```sh
+./build/gpumemd-bench --file /models/bert.bin --iterations 5 --backend auto
+```
+
+`auto` prefers CUDA, then Metal, then Mock. Use `--backend mock`, `metal`, or
+`cuda` to select one explicitly. Cold samples read and transfer the file after
+each unload; warm samples repeat the idempotent load while the model remains
+resident.
 
 ## Structure and next steps
 
@@ -113,11 +134,11 @@ of at most 128 bytes; quoting and whitespace are not supported.
 - `src/client/`: `gpumemctl` command-line client.
 - `tests/`: CTest checks for core accounting, parsing, CLI behavior, and IPC.
 
-The v0.7 acceptance demonstration combines concurrent resource clients with
+The v0.8 acceptance demonstration combines concurrent resource clients with
 three registered models, explicit loads, refcount protection, LRU eviction,
 and complete unload/release/unregister cleanup. Final `status` should report
 used `0` and all configured capacity free.
 
-Real model loading, model kernels, CUDA IPC, and multi-GPU support remain future
-work. CUDA builds select device 0 only and are enabled only when `nvcc` and the
-CUDA toolkit are available at configure time.
+Model-format parsing, model kernels, CUDA IPC, and multi-GPU support remain
+future work. CUDA builds select device 0 only and are enabled only when `nvcc`
+and the CUDA toolkit are available at configure time.

@@ -161,6 +161,10 @@ void parses_model_commands() {
     assert(result.ok() && result.command.type == CommandType::ReleaseModel);
     result = parse_command("models");
     assert(result.ok() && result.command.type == CommandType::Models);
+
+    result = parse_command("register_file bert /tmp/bert.bin bert-base");
+    assert(result.ok() && result.command.type == CommandType::RegisterFile);
+    assert(result.command.path == "/tmp/bert.bin");
 }
 
 void rejects_invalid_model_commands() {
@@ -216,8 +220,8 @@ void formats_model_wire_responses() {
            "ERR refcount_underflow model reference count is already zero\n");
 
     const ModelSnapshot snapshot{{
-        ModelRecord{"alpha", "a", 2, 0, 0},
-        ModelRecord{"bert", "bert-base", 7000000000, 1, 3}}};
+        ModelRecord{"alpha", "a", 2, 0, 0, {}},
+        ModelRecord{"bert", "bert-base", 7000000000, 1, 3, {}}}};
     assert(format_models(snapshot) ==
            "OK models 2\n"
            "MODEL alpha a 2 0 0\n"

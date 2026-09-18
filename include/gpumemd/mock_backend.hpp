@@ -11,6 +11,8 @@ class MockBackend final : public AcceleratorBackend {
 public:
     [[nodiscard]] BackendOperationResult load(std::string_view id,
                                                Bytes bytes) override;
+    [[nodiscard]] BackendOperationResult load(
+        std::string_view id, std::span<const std::byte> data) override;
     [[nodiscard]] BackendOperationResult unload(std::string_view id) override;
     [[nodiscard]] bool is_loaded(std::string_view id) const override;
     [[nodiscard]] BackendSnapshot snapshot() const override;

@@ -1,6 +1,8 @@
 #include "gpumemd/model_registry.hpp"
 
 #include <algorithm>
+#include <filesystem>
+#include <limits>
 
 namespace gpumemd {
 
@@ -28,6 +30,21 @@ bool ModelRegistry::valid_metadata(std::string_view metadata) noexcept {
     });
 }
 
+namespace {
+
+bool valid_path(std::string_view path) noexcept {
+    if (path.empty() || path.size() > 4096) {
+        return false;
+    }
+    return std::all_of(path.begin(), path.end(), [](char character) {
+        const auto value = static_cast<unsigned char>(character);
+        return value >= 32 && value != 127 && character != '\n' && character != '\r' &&
+               character != '\t';
+    });
+}
+
+} // namespace
+
 ModelOperationResult ModelRegistry::register_model(std::string_view id, Bytes footprint_bytes,
                                                    std::string_view metadata) {
     if (!valid_id(id)) {
@@ -45,8 +62,41 @@ ModelOperationResult ModelRegistry::register_model(std::string_view id, Bytes fo
         return {ModelError::DuplicateModel, 0};
     }
     models_.emplace(std::string(id), ModelRecord{std::string(id), std::string(metadata),
-                                                  footprint_bytes, 0, 0});
+                                                  footprint_bytes, 0, 0, {}});
     return {ModelError::None, footprint_bytes};
+}
+
+ModelOperationResult ModelRegistry::register_file(std::string_view id,
+                                                   std::string_view path,
+                                                   std::string_view metadata) {
+    if (!valid_id(id)) {
+        return {ModelError::InvalidId, 0};
+    }
+    if (!valid_path(path)) {
+        return {ModelError::InvalidPath, 0};
+    }
+    if (!valid_metadata(metadata)) {
+        return {ModelError::InvalidMetadata, 0};
+    }
+
+    std::error_code status_error;
+    const std::filesystem::path file_path(path);
+    if (!std::filesystem::is_regular_file(file_path, status_error) || status_error) {
+        return {ModelError::FileUnavailable, 0};
+    }
+    const auto file_size = std::filesystem::file_size(file_path, status_error);
+    if (status_error || file_size == 0 || file_size > std::numeric_limits<Bytes>::max()) {
+        return {ModelError::FileUnavailable, 0};
+    }
+
+    std::lock_guard lock(mutex_);
+    if (models_.contains(std::string(id))) {
+        return {ModelError::DuplicateModel, 0};
+    }
+    models_.emplace(std::string(id), ModelRecord{std::string(id), std::string(metadata),
+                                                  static_cast<Bytes>(file_size), 0, 0,
+                                                  std::string(path)});
+    return {ModelError::None, static_cast<Bytes>(file_size)};
 }
 
 ModelOperationResult ModelRegistry::unregister_model(std::string_view id) {

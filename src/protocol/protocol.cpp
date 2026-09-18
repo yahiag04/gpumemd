@@ -203,6 +203,27 @@ ParseResult parse_command(std::string_view line) {
         return {ParseError::None, std::move(command)};
     }
 
+    if (tokens[0] == "register_file") {
+        if (tokens.size() != 4) {
+            return error(ParseError::InvalidRequest);
+        }
+        if (!valid_name(tokens[1])) {
+            return error(ParseError::InvalidModelId);
+        }
+        if (tokens[2].empty() || tokens[2].size() > 4096) {
+            return error(ParseError::InvalidPath);
+        }
+        if (!valid_metadata(tokens[3])) {
+            return error(ParseError::InvalidMetadata);
+        }
+        Command command;
+        command.type = CommandType::RegisterFile;
+        command.name = std::string(tokens[1]);
+        command.path = std::string(tokens[2]);
+        command.metadata = std::string(tokens[3]);
+        return {ParseError::None, std::move(command)};
+    }
+
     if (tokens[0] == "unregister" || tokens[0] == "retain" ||
         tokens[0] == "release_model" || tokens[0] == "load" ||
         tokens[0] == "unload") {
@@ -301,6 +322,8 @@ std::string format_parse_error(ParseError error_code) {
         return "ERR invalid_model_id invalid model ID\n";
     case ParseError::InvalidMetadata:
         return "ERR invalid_metadata invalid model metadata\n";
+    case ParseError::InvalidPath:
+        return "ERR invalid_path invalid model file path\n";
     case ParseError::None:
         return "";
     }
@@ -376,6 +399,14 @@ std::string format_model_operation_result(std::string_view action,
         return "ERR unknown_residency model is not resident\n";
     case ModelError::InsufficientMemory:
         return "ERR insufficient_memory insufficient memory for model\n";
+    case ModelError::InvalidPath:
+        return "ERR invalid_path invalid model file path\n";
+    case ModelError::FileUnavailable:
+        return "ERR file_unavailable model file is unavailable\n";
+    case ModelError::SourceChanged:
+        return "ERR source_changed model file size changed\n";
+    case ModelError::ReadFailure:
+        return "ERR read_failure could not read model file\n";
     case ModelError::BackendFailure:
         return "ERR backend_failure accelerator backend operation failed\n";
     case ModelError::None:
@@ -390,7 +421,11 @@ std::string format_models(const ModelSnapshot& snapshot) {
     for (const auto& model : snapshot.models) {
         output << "MODEL " << model.id << ' ' << model.metadata << ' '
                << model.footprint_bytes << ' ' << model.ref_count << ' '
-               << model.last_access << '\n';
+               << model.last_access;
+        if (!model.source_path.empty()) {
+            output << ' ' << model.source_path;
+        }
+        output << '\n';
     }
     output << "END\n";
     return output.str();

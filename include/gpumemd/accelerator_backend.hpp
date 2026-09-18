@@ -2,6 +2,8 @@
 
 #include "gpumemd/memory.hpp"
 
+#include <cstddef>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -44,6 +46,8 @@ public:
 
     [[nodiscard]] virtual BackendOperationResult load(std::string_view id,
                                                        Bytes bytes) = 0;
+    [[nodiscard]] virtual BackendOperationResult load(
+        std::string_view id, std::span<const std::byte> data) = 0;
     [[nodiscard]] virtual BackendOperationResult unload(std::string_view id) = 0;
     [[nodiscard]] virtual bool is_loaded(std::string_view id) const = 0;
     [[nodiscard]] virtual BackendSnapshot snapshot() const = 0;

@@ -32,6 +32,11 @@ BackendOperationResult MockBackend::load(std::string_view id, Bytes bytes) {
     return {BackendError::None, bytes};
 }
 
+BackendOperationResult MockBackend::load(std::string_view id,
+                                         std::span<const std::byte> data) {
+    return load(id, static_cast<Bytes>(data.size()));
+}
+
 BackendOperationResult MockBackend::unload(std::string_view id) {
     if (!valid_id(id)) {
         return {BackendError::InvalidModelId, 0};
