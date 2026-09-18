@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include <fcntl.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -259,6 +260,13 @@ int UnixSocketServer::run(const std::function<bool()>& external_stop) {
         unlink(socket_path_.c_str());
         return -1;
     }
+    const int flags = fcntl(listen_fd_, F_GETFL, 0);
+    if (flags < 0 || fcntl(listen_fd_, F_SETFL, flags | O_NONBLOCK) < 0) {
+        close(listen_fd_);
+        listen_fd_ = -1;
+        unlink(socket_path_.c_str());
+        return -1;
+    }
 
     std::vector<std::thread> workers;
     while (!stop_requested_.load(std::memory_order_relaxed)) {
@@ -279,14 +287,24 @@ int UnixSocketServer::run(const std::function<bool()>& external_stop) {
             continue;
         }
 
-        if (listener.revents & POLLIN) {
+        // Drain all pending clients. The non-blocking accept also handles
+        // environments where poll does not reliably wake for AF_UNIX connects.
+        while (!stop_requested_.load(std::memory_order_relaxed)) {
             const int client_fd = accept(listen_fd_, nullptr, nullptr);
             if (client_fd >= 0) {
                 workers.emplace_back(client_session, client_fd, std::ref(manager_),
                                      std::ref(registry_), std::ref(residency_),
                                      metrics_, nodes_,
                                      std::cref(stop_requested_));
+                continue;
             }
+            if (errno == EINTR) {
+                continue;
+            }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                break;
+            }
+            break;
         }
     }
 
