@@ -51,6 +51,8 @@ int main(int argc, char* argv[]) {
             const std::string value{argv[++index]};
             if (argument == "--memory") {
                 memory_token = value;
+            } else if (argument == "--socket") {
+                socket_path = value;
             } else {
                 if (value == "priority") {
                     scheduling_policy = gpumemd::SchedulingPolicy::PriorityFifo;
@@ -95,7 +97,8 @@ int main(int argc, char* argv[]) {
         }
 #endif
         gpumemd::ModelResidencyManager residency(registry, manager, *backend);
-        gpumemd::UnixSocketServer server(manager, registry, residency, socket_path);
+        gpumemd::Metrics metrics;
+        gpumemd::UnixSocketServer server(manager, registry, residency, socket_path, &metrics);
         std::signal(SIGINT, handle_signal);
         std::signal(SIGTERM, handle_signal);
         std::signal(SIGPIPE, SIG_IGN);

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(gpumemd VERSION 0.12.0 LANGUAGES CXX)
+project(gpumemd VERSION 0.13.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -15,6 +15,7 @@ add_library(gpumemd_core STATIC
     src/core/model_loader.cpp
     src/core/memory_allocator.cpp
     src/core/device_placement.cpp
+    src/core/metrics.cpp
     src/core/model_residency.cpp
     src/core/resource_manager.cpp
 )

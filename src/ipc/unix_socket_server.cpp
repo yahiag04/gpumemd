@@ -28,7 +28,7 @@ struct Client {
 };
 
 bool process_input(Client& client, ResourceManager& manager, ModelRegistry& registry,
-                   ModelResidencyManager& residency);
+                   ModelResidencyManager& residency, Metrics* metrics);
 
 bool send_all(int fd, const std::string& response) noexcept {
     std::size_t sent = 0;
@@ -46,19 +46,33 @@ bool send_all(int fd, const std::string& response) noexcept {
 }
 
 std::string dispatch(ResourceManager& manager, ModelRegistry& registry,
-                     ModelResidencyManager& residency, const Command& command) {
+                     ModelResidencyManager& residency, const Command& command,
+                     Metrics* metrics) {
     switch (command.type) {
     case CommandType::Acquire:
         if (command.acquire_mode == AcquireMode::Try) {
-            return format_operation_result("acquired", command.name,
-                                           manager.try_acquire(command.name, command.bytes));
+            const OperationResult result = manager.try_acquire(command.name, command.bytes);
+            if (metrics != nullptr) {
+                metrics->record_acquire(result.ok(), result.amount);
+            }
+            return format_operation_result("acquired", command.name, result);
         }
-        return format_operation_result("acquired", command.name,
-                                       manager.acquire(command.name, command.bytes,
-                                                       command.options));
+        {
+            const OperationResult result =
+                manager.acquire(command.name, command.bytes, command.options);
+            if (metrics != nullptr) {
+                metrics->record_acquire(result.ok(), result.amount);
+            }
+            return format_operation_result("acquired", command.name, result);
+        }
     case CommandType::Release:
-        return format_operation_result("released", command.name,
-                                       manager.release(command.name));
+        {
+            const OperationResult result = manager.release(command.name);
+            if (metrics != nullptr) {
+                metrics->record_release(result.ok(), result.amount);
+            }
+            return format_operation_result("released", command.name, result);
+        }
     case CommandType::Status:
         return format_status(manager.status());
     case CommandType::RegisterModel:
@@ -81,21 +95,35 @@ std::string dispatch(ResourceManager& manager, ModelRegistry& registry,
     case CommandType::Models:
         return format_models(registry.models());
     case CommandType::LoadModel:
-        return format_residency_operation_result("loaded", command.name,
-                                                 residency.load(command.name));
+        {
+            const ModelOperationResult result = residency.load(command.name);
+            if (metrics != nullptr) {
+                metrics->record_model_load(result.ok());
+            }
+            return format_residency_operation_result("loaded", command.name, result);
+        }
     case CommandType::UnloadModel:
-        return format_residency_operation_result("unloaded", command.name,
-                                                 residency.unload(command.name));
+        {
+            const ModelOperationResult result = residency.unload(command.name);
+            if (metrics != nullptr) {
+                metrics->record_model_unload(result.ok());
+            }
+            return format_residency_operation_result("unloaded", command.name, result);
+        }
     case CommandType::Residency:
         return format_residency(residency.residency());
     case CommandType::Share:
         return format_share_result(command.name, residency.share(command.name));
+    case CommandType::Metrics:
+        return metrics == nullptr ? "ERR metrics_unavailable metrics are disabled\n"
+                                  : format_metrics(metrics->snapshot());
     }
     return "ERR internal_error unknown command type\n";
 }
 
 void client_session(int fd, ResourceManager& manager, ModelRegistry& registry,
                     ModelResidencyManager& residency,
+                    Metrics* metrics,
                     const std::atomic<bool>& stop_requested) {
     timeval timeout{0, 100'000};
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
@@ -105,7 +133,7 @@ void client_session(int fd, ResourceManager& manager, ModelRegistry& registry,
         const ssize_t count = read(fd, buffer, sizeof(buffer));
         if (count > 0) {
             client.input.append(buffer, static_cast<std::size_t>(count));
-            if (!process_input(client, manager, registry, residency)) {
+            if (!process_input(client, manager, registry, residency, metrics)) {
                 break;
             }
         } else if (count == 0) {
@@ -123,7 +151,7 @@ void client_session(int fd, ResourceManager& manager, ModelRegistry& registry,
 }
 
 bool process_input(Client& client, ResourceManager& manager, ModelRegistry& registry,
-                   ModelResidencyManager& residency) {
+                   ModelResidencyManager& residency, Metrics* metrics) {
     while (true) {
         const std::size_t newline = client.input.find('\n');
         if (newline == std::string::npos) {
@@ -150,8 +178,11 @@ bool process_input(Client& client, ResourceManager& manager, ModelRegistry& regi
         const ParseResult parsed = parse_command(line);
         const std::string response = parsed.ok()
                                           ? dispatch(manager, registry, residency,
-                                                     parsed.command)
+                                                     parsed.command, metrics)
                                           : format_parse_error(parsed.error);
+        if (metrics != nullptr) {
+            metrics->record_request(response.starts_with("OK"));
+        }
         if (!send_all(client.fd, response)) {
             return false;
         }
@@ -162,9 +193,9 @@ bool process_input(Client& client, ResourceManager& manager, ModelRegistry& regi
 
 UnixSocketServer::UnixSocketServer(ResourceManager& manager, ModelRegistry& registry,
                                    ModelResidencyManager& residency,
-                                   std::string socket_path)
+                                   std::string socket_path, Metrics* metrics)
     : manager_(manager), registry_(registry), residency_(residency),
-      socket_path_(std::move(socket_path)) {}
+      socket_path_(std::move(socket_path)), metrics_(metrics) {}
 
 UnixSocketServer::~UnixSocketServer() {
     request_shutdown();
@@ -239,6 +270,7 @@ int UnixSocketServer::run(const std::function<bool()>& external_stop) {
             if (client_fd >= 0) {
                 workers.emplace_back(client_session, client_fd, std::ref(manager_),
                                      std::ref(registry_), std::ref(residency_),
+                                     metrics_,
                                      std::cref(stop_requested_));
             }
         }
