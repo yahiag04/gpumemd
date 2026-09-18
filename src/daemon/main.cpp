@@ -1,6 +1,9 @@
 #include "gpumemd/model_registry.hpp"
 #include "gpumemd/model_residency.hpp"
 #include "gpumemd/mock_backend.hpp"
+#if defined(GPUMEMD_HAS_CUDA)
+#include "gpumemd/cuda_backend.hpp"
+#endif
 #if defined(GPUMEMD_HAS_METAL)
 #include "gpumemd/metal_backend.hpp"
 #endif
@@ -67,9 +70,16 @@ int main(int argc, char* argv[]) {
         gpumemd::ModelRegistry registry;
         gpumemd::MockBackend mock_backend;
         gpumemd::AcceleratorBackend* backend = &mock_backend;
+#if defined(GPUMEMD_HAS_CUDA)
+        std::unique_ptr<gpumemd::CUDABackend> cuda_backend;
+        if (gpumemd::CUDABackend::is_available()) {
+            cuda_backend = std::make_unique<gpumemd::CUDABackend>();
+            backend = cuda_backend.get();
+        }
+#endif
 #if defined(GPUMEMD_HAS_METAL)
         std::unique_ptr<gpumemd::MetalBackend> metal_backend;
-        if (gpumemd::MetalBackend::is_available()) {
+        if (backend == &mock_backend && gpumemd::MetalBackend::is_available()) {
             metal_backend = std::make_unique<gpumemd::MetalBackend>();
             backend = metal_backend.get();
         }

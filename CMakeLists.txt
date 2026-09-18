@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(gpumemd VERSION 0.6.0 LANGUAGES CXX)
+project(gpumemd VERSION 0.7.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+include(CheckLanguage)
+check_language(CUDA)
 
 # Hardware-independent resource accounting lives in this library.
 add_library(gpumemd_core STATIC
@@ -33,6 +36,20 @@ if(APPLE)
     )
 endif()
 
+if(CMAKE_CUDA_COMPILER)
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    add_library(gpumemd_cuda STATIC src/backend/cuda_backend.cu)
+    target_include_directories(gpumemd_cuda PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    )
+    set_target_properties(gpumemd_cuda PROPERTIES
+        CUDA_STANDARD 20
+        CUDA_STANDARD_REQUIRED YES
+    )
+    target_link_libraries(gpumemd_cuda PUBLIC CUDA::cudart)
+endif()
+
 add_library(gpumemd_protocol STATIC src/protocol/protocol.cpp)
 target_include_directories(gpumemd_protocol PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -51,6 +68,10 @@ target_link_libraries(gpumemd PRIVATE gpumemd_server)
 if(APPLE)
     target_compile_definitions(gpumemd PRIVATE GPUMEMD_HAS_METAL=1)
     target_link_libraries(gpumemd PRIVATE gpumemd_metal)
+endif()
+if(CMAKE_CUDA_COMPILER)
+    target_compile_definitions(gpumemd PRIVATE GPUMEMD_HAS_CUDA=1)
+    target_link_libraries(gpumemd PRIVATE gpumemd_cuda)
 endif()
 
 add_executable(gpumemctl src/client/main.cpp)
@@ -103,6 +124,16 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME metal_backend COMMAND metal_backend_test)
         set_tests_properties(metal_backend PROPERTIES TIMEOUT 10)
+    endif()
+
+    if(CMAKE_CUDA_COMPILER)
+        add_executable(cuda_backend_test tests/cuda_backend_test.cpp)
+        target_link_libraries(cuda_backend_test PRIVATE gpumemd_cuda)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+            target_compile_options(cuda_backend_test PRIVATE -Wall -Wextra -Wpedantic)
+        endif()
+        add_test(NAME cuda_backend COMMAND cuda_backend_test)
+        set_tests_properties(cuda_backend PROPERTIES TIMEOUT 10)
     endif()
 
     add_executable(protocol_test tests/protocol_test.cpp)

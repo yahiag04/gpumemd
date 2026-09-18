@@ -16,6 +16,7 @@ enum class BackendError {
     NotLoaded,
     DeviceUnavailable,
     AllocationFailed,
+    RuntimeFailure,
 };
 
 struct BackendOperationResult {

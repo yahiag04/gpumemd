@@ -3,20 +3,22 @@
 A simulated GPU resource and model-residency broker being built incrementally
 in modern C++, with no CUDA or Metal dependency yet.
 
-**Current state: v0.6 implemented.** CMake builds the daemon, the independent
+**Current state: v0.7 implemented.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
 CLI behavior, and Unix socket integration.
 
-v0.6 supports a real Apple Metal buffer backend when built and run on macOS;
-other platforms and systems without a Metal device continue to use the mock
-backend. It does not load model files or run model kernels.
+v0.7 supports optional NVIDIA CUDA allocations when CMake finds a CUDA compiler
+and toolkit. macOS continues to use Metal, and systems without a usable
+accelerator continue to use the mock backend. It does not load model files or
+run model kernels.
 Model footprints and residency consume logical reservations in the daemon's
 configured capacity so residency policy can be exercised without hardware.
 The accelerator boundary is represented by `AcceleratorBackend`; `MockBackend`
 tracks simulated model loads and unloads, while `MetalBackend` allocates one
-shared `MTLBuffer` per resident model.
+shared `MTLBuffer` per resident model and `CUDABackend` allocates one CUDA
+device buffer per resident model.
 
 ## Build and test
 
@@ -111,10 +113,11 @@ of at most 128 bytes; quoting and whitespace are not supported.
 - `src/client/`: `gpumemctl` command-line client.
 - `tests/`: CTest checks for core accounting, parsing, CLI behavior, and IPC.
 
-The v0.6 acceptance demonstration combines concurrent resource clients with
+The v0.7 acceptance demonstration combines concurrent resource clients with
 three registered models, explicit loads, refcount protection, LRU eviction,
 and complete unload/release/unregister cleanup. Final `status` should report
 used `0` and all configured capacity free.
 
-Real model loading, model kernels, CUDA integration, and multi-GPU support
-remain future work.
+Real model loading, model kernels, CUDA IPC, and multi-GPU support remain future
+work. CUDA builds select device 0 only and are enabled only when `nvcc` and the
+CUDA toolkit are available at configure time.
