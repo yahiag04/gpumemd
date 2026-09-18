@@ -135,6 +135,8 @@ void parses_wait_options_and_try_acquire() {
     assert(result.ok() && result.command.options.priority == std::numeric_limits<int>::min());
     result = parse_command("acquire processA 1B +2147483647 0");
     assert(result.ok() && result.command.options.priority == std::numeric_limits<int>::max());
+    result = parse_command("acquire processA 1B 2 1000 75");
+    assert(result.ok() && result.command.options.estimated_cost == std::chrono::milliseconds(75));
 }
 
 void rejects_invalid_wait_options() {

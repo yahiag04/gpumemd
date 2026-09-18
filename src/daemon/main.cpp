@@ -29,7 +29,8 @@ void handle_signal(int) {
 void print_usage(std::ostream& output) {
     output << "Usage: gpumemd --memory SIZE --socket PATH\n\n"
               "Start a simulated GPU memory broker.\n"
-              "SIZE accepts B, KB, MB, GB, KiB, MiB, and GiB units.\n";
+              "SIZE accepts B, KB, MB, GB, KiB, MiB, and GiB units.\n"
+              "--scheduling accepts priority or cost.\n";
 }
 
 } // namespace
@@ -42,14 +43,23 @@ int main(int argc, char* argv[]) {
 
     std::string memory_token;
     std::string socket_path;
+    gpumemd::SchedulingPolicy scheduling_policy = gpumemd::SchedulingPolicy::PriorityFifo;
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument{argv[index]};
-        if ((argument == "--memory" || argument == "--socket") && index + 1 < argc) {
+        if ((argument == "--memory" || argument == "--socket" ||
+             argument == "--scheduling") && index + 1 < argc) {
             const std::string value{argv[++index]};
             if (argument == "--memory") {
                 memory_token = value;
             } else {
-                socket_path = value;
+                if (value == "priority") {
+                    scheduling_policy = gpumemd::SchedulingPolicy::PriorityFifo;
+                } else if (value == "cost") {
+                    scheduling_policy = gpumemd::SchedulingPolicy::CostAware;
+                } else {
+                    std::cerr << "gpumemd: invalid scheduling policy\n";
+                    return 2;
+                }
             }
         } else {
             std::cerr << "gpumemd: expected --memory SIZE and --socket PATH\n";
@@ -66,7 +76,7 @@ int main(int argc, char* argv[]) {
     }
 
     try {
-        gpumemd::ResourceManager manager(*capacity);
+        gpumemd::ResourceManager manager(*capacity, scheduling_policy);
         gpumemd::ModelRegistry registry;
         gpumemd::MockBackend mock_backend;
         gpumemd::AcceleratorBackend* backend = &mock_backend;

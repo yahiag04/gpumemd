@@ -7,7 +7,8 @@
 
 namespace gpumemd {
 
-ResourceManager::ResourceManager(Bytes capacity) : capacity_(capacity) {
+ResourceManager::ResourceManager(Bytes capacity, SchedulingPolicy policy)
+    : capacity_(capacity), scheduling_policy_(policy) {
     if (capacity == 0) {
         throw std::invalid_argument("resource capacity must be positive");
     }
@@ -57,7 +58,11 @@ void ResourceManager::grant_waiters_locked(Clock::time_point now) {
             if (selected == pending_.size() ||
                 candidate->priority > pending_[selected]->priority ||
                 (candidate->priority == pending_[selected]->priority &&
-                 candidate->sequence < pending_[selected]->sequence)) {
+                 ((scheduling_policy_ == SchedulingPolicy::CostAware &&
+                   candidate->estimated_cost < pending_[selected]->estimated_cost) ||
+                  ((scheduling_policy_ != SchedulingPolicy::CostAware ||
+                    candidate->estimated_cost == pending_[selected]->estimated_cost) &&
+                   candidate->sequence < pending_[selected]->sequence)))) {
                 selected = index;
             }
         }
@@ -132,6 +137,10 @@ OperationResult ResourceManager::acquire(std::string_view name, Bytes bytes,
     request->name = name;
     request->bytes = bytes;
     request->priority = options.priority;
+    if (options.estimated_cost.count() < 0) {
+        return {ErrorCode::InvalidTimeout, 0};
+    }
+    request->estimated_cost = options.estimated_cost;
     request->sequence = next_sequence_++;
     const auto now = Clock::now();
     if (options.timeout != std::chrono::milliseconds::max()) {
