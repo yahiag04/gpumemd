@@ -16,6 +16,7 @@ enum class CommandType {
     Release,
     Status,
     RegisterModel,
+    RegisterFile,
     UnregisterModel,
     RetainModel,
     ReleaseModel,
@@ -37,6 +38,7 @@ enum class ParseError {
     InvalidName,
     InvalidModelId,
     InvalidMetadata,
+    InvalidPath,
 };
 
 struct Command {
@@ -46,6 +48,7 @@ struct Command {
     AcquireMode acquire_mode{AcquireMode::Wait};
     AcquireOptions options{};
     std::string metadata;
+    std::string path;
 };
 
 struct ParseResult {

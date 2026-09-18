@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstring>
 #include <limits>
 #include <mutex>
 #include <string>
@@ -54,6 +55,21 @@ BackendOperationResult MetalBackend::load(std::string_view id, Bytes bytes) {
     }
     impl_->buffers.emplace(key, buffer);
     return {BackendError::None, bytes};
+}
+
+BackendOperationResult MetalBackend::load(std::string_view id,
+                                          std::span<const std::byte> data) {
+    const auto result = load(id, static_cast<Bytes>(data.size()));
+    if (!result.ok()) {
+        return result;
+    }
+    std::lock_guard lock(impl_->mutex);
+    const auto iterator = impl_->buffers.find(std::string(id));
+    if (iterator == impl_->buffers.end()) {
+        return {BackendError::RuntimeFailure, 0};
+    }
+    std::memcpy([iterator->second contents], data.data(), data.size());
+    return result;
 }
 
 BackendOperationResult MetalBackend::unload(std::string_view id) {

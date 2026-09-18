@@ -90,6 +90,27 @@ BackendOperationResult CUDABackend::load(std::string_view id, Bytes bytes) {
     return {BackendError::None, bytes};
 }
 
+BackendOperationResult CUDABackend::load(std::string_view id,
+                                         std::span<const std::byte> data) {
+    const auto result = load(id, static_cast<Bytes>(data.size()));
+    if (!result.ok()) {
+        return result;
+    }
+    std::lock_guard lock(impl_->mutex);
+    const auto iterator = impl_->allocations.find(std::string(id));
+    if (iterator == impl_->allocations.end()) {
+        return {BackendError::RuntimeFailure, 0};
+    }
+    const auto copy_result = cudaMemcpy(iterator->second.pointer, data.data(), data.size(),
+                                         cudaMemcpyHostToDevice);
+    if (copy_result != cudaSuccess) {
+        (void)cudaFree(iterator->second.pointer);
+        impl_->allocations.erase(iterator);
+        return {BackendError::RuntimeFailure, 0};
+    }
+    return result;
+}
+
 BackendOperationResult CUDABackend::unload(std::string_view id) {
     if (!valid_id(id)) {
         return {BackendError::InvalidModelId, 0};

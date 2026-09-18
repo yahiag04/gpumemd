@@ -65,6 +65,10 @@ std::string dispatch(ResourceManager& manager, ModelRegistry& registry,
         return format_model_operation_result(
             "registered", command.name,
             registry.register_model(command.name, command.bytes, command.metadata));
+    case CommandType::RegisterFile:
+        return format_model_operation_result(
+            "registered", command.name,
+            registry.register_file(command.name, command.path, command.metadata));
     case CommandType::UnregisterModel:
         return format_model_operation_result("unregistered", command.name,
                                              residency.unregister_model(command.name));
