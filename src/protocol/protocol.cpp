@@ -376,6 +376,8 @@ std::string format_model_operation_result(std::string_view action,
         return "ERR unknown_residency model is not resident\n";
     case ModelError::InsufficientMemory:
         return "ERR insufficient_memory insufficient memory for model\n";
+    case ModelError::BackendFailure:
+        return "ERR backend_failure accelerator backend operation failed\n";
     case ModelError::None:
         break;
     }

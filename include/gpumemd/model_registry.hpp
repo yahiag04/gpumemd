@@ -22,6 +22,7 @@ enum class ModelError {
     RefcountUnderflow,
     UnknownResidency,
     InsufficientMemory,
+    BackendFailure,
 };
 
 struct ModelOperationResult {

@@ -1,9 +1,11 @@
 #pragma once
 
+#include "gpumemd/accelerator_backend.hpp"
 #include "gpumemd/model_registry.hpp"
 #include "gpumemd/resource_manager.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -27,6 +29,8 @@ struct ResidencySnapshot {
 class ModelResidencyManager {
 public:
     ModelResidencyManager(ModelRegistry& registry, ResourceManager& resources);
+    ModelResidencyManager(ModelRegistry& registry, ResourceManager& resources,
+                          AcceleratorBackend& backend);
 
     [[nodiscard]] ModelOperationResult load(std::string_view id);
     [[nodiscard]] ModelOperationResult unload(std::string_view id);
@@ -40,6 +44,8 @@ private:
 
     ModelRegistry& registry_;
     ResourceManager& resources_;
+    std::unique_ptr<AcceleratorBackend> owned_backend_;
+    AcceleratorBackend& backend_;
     std::unordered_map<std::string, ResidencyRecord> records_;
     std::uint64_t next_loaded_{0};
     mutable std::mutex mutex_;

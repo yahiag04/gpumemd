@@ -1,4 +1,5 @@
 #include "gpumemd/model_residency.hpp"
+#include "gpumemd/mock_backend.hpp"
 
 #include <cassert>
 #include <cstddef>
@@ -9,6 +10,7 @@
 using gpumemd::ModelError;
 using gpumemd::ModelRegistry;
 using gpumemd::ModelResidencyManager;
+using gpumemd::MockBackend;
 using gpumemd::ResourceManager;
 
 namespace {
@@ -16,13 +18,16 @@ namespace {
 void loads_and_unloads_once() {
     ModelRegistry registry;
     ResourceManager resources(100);
-    ModelResidencyManager residency(registry, resources);
+    MockBackend backend;
+    ModelResidencyManager residency(registry, resources, backend);
     assert(registry.register_model("bert", 60, "base").ok());
     assert(residency.load("bert").amount == 60);
+    assert(backend.is_loaded("bert"));
     assert(resources.status().used == 60);
     assert(residency.load("bert").amount == 60);
     assert(resources.status().used == 60);
     assert(residency.unload("bert").amount == 60);
+    assert(!backend.is_loaded("bert"));
     assert(resources.status().used == 0);
 }
 
@@ -39,7 +44,8 @@ void referenced_model_cannot_unload() {
 void evicts_oldest_unreferenced_model() {
     ModelRegistry registry;
     ResourceManager resources(100);
-    ModelResidencyManager residency(registry, resources);
+    MockBackend backend;
+    ModelResidencyManager residency(registry, resources, backend);
     assert(registry.register_model("a", 40, "a").ok());
     assert(registry.register_model("b", 40, "b").ok());
     assert(registry.register_model("c", 40, "c").ok());
@@ -47,6 +53,9 @@ void evicts_oldest_unreferenced_model() {
     assert(residency.load("b").ok());
     assert(residency.retain("b").ok());
     assert(residency.load("c").ok());
+    assert(!backend.is_loaded("a"));
+    assert(backend.is_loaded("b"));
+    assert(backend.is_loaded("c"));
     const auto snapshot = residency.residency();
     assert(snapshot.records.size() == 3);
     assert(!snapshot.records[0].resident);
