@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(gpumemd VERSION 0.15.0 LANGUAGES CXX)
+project(gpumemd VERSION 0.16.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -63,6 +63,13 @@ target_include_directories(gpumemd_protocol PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 target_compile_features(gpumemd_protocol PUBLIC cxx_std_20)
+
+add_library(gpumemd_client STATIC src/client/client.cpp)
+target_include_directories(gpumemd_client PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+target_compile_features(gpumemd_client PUBLIC cxx_std_20)
+target_link_libraries(gpumemd_client PUBLIC gpumemd_protocol)
 
 add_library(gpumemd_server STATIC src/ipc/unix_socket_server.cpp)
 target_include_directories(gpumemd_server PUBLIC
@@ -162,6 +169,10 @@ if(BUILD_TESTING)
     add_executable(node_registry_test tests/node_registry_test.cpp)
     target_link_libraries(node_registry_test PRIVATE gpumemd_core)
     add_test(NAME node_registry COMMAND node_registry_test)
+
+    add_executable(client_test tests/client_test.cpp)
+    target_link_libraries(client_test PRIVATE gpumemd_client gpumemd_server)
+    add_test(NAME client COMMAND client_test)
     set_tests_properties(device_placement PROPERTIES TIMEOUT 10)
 
     if(APPLE)
