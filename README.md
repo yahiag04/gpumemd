@@ -3,7 +3,7 @@
 A simulated GPU resource and model-residency broker being built incrementally
 in modern C++, with no CUDA or Metal dependency yet.
 
-**Current state: v0.17 implemented.** CMake builds the daemon, the independent
+**Current state: v0.18 implemented.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
@@ -41,6 +41,8 @@ the wire protocol.
 The v0.17 CUDA client wrapper combines the `share` request with
 `cudaIpcOpenMemHandle` and closes the imported allocation automatically through
 RAII when the wrapper is destroyed.
+The v0.18 CUDA demo performs an end-to-end IPC check by importing a resident
+allocation and executing `cudaMemset` from a separate process.
 
 ## Build and test
 
@@ -113,6 +115,18 @@ if (shared.ok()) {
     // Use device_pointer from CUDA code while the allocation remains alive.
 }
 ```
+
+On a CUDA machine, the complete demo is:
+
+```sh
+./build/gpumemd --memory 1GB --socket /tmp/gpumemd.sock &
+./build/gpumemctl --socket /tmp/gpumemd.sock register bert 64MB demo
+./build/gpumemctl --socket /tmp/gpumemd.sock load bert
+./build/gpumemd-cuda-demo --socket /tmp/gpumemd.sock --model bert
+```
+
+Expected output includes `OK opened`, `OK cudaMemset`, and
+`OK closed_on_scope_exit`.
 
 `gpumemctl` returns a non-zero status for broker or command errors.
 `acquire` waits for memory when needed; its optional values are priority and
