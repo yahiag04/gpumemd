@@ -192,6 +192,11 @@ ParseResult parse_command(std::string_view line) {
         return {ParseError::None, std::move(command)};
     }
 
+    if (tokens[0] == "metrics") {
+        if (tokens.size() != 1) return error(ParseError::InvalidRequest);
+        return {ParseError::None, {CommandType::Metrics}};
+    }
+
     if (tokens[0] == "register") {
         if (tokens.size() != 4) {
             return error(ParseError::InvalidRequest);
@@ -433,6 +438,22 @@ std::string format_model_operation_result(std::string_view action,
         break;
     }
     return "ERR internal_error internal model registry error\n";
+}
+
+std::string format_metrics(const MetricsSnapshot& snapshot) {
+    std::ostringstream output;
+    output << "OK metrics\n"
+           << "requests " << snapshot.requests << '\n'
+           << "successes " << snapshot.successes << '\n'
+           << "failures " << snapshot.failures << '\n'
+           << "acquires " << snapshot.acquires << '\n'
+           << "releases " << snapshot.releases << '\n'
+           << "model_loads " << snapshot.model_loads << '\n'
+           << "model_unloads " << snapshot.model_unloads << '\n'
+           << "acquired_bytes " << snapshot.acquired_bytes << '\n'
+           << "released_bytes " << snapshot.released_bytes << '\n'
+           << "END\n";
+    return output.str();
 }
 
 std::string format_models(const ModelSnapshot& snapshot) {

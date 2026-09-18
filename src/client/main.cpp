@@ -16,12 +16,14 @@ void print_usage(std::ostream& output) {
     output << "Usage: gpumemctl --socket PATH COMMAND [ARGUMENTS...]\n\n"
               "Commands: acquire NAME SIZE [PRIORITY] [TIMEOUT_MS],\n"
               "          try_acquire NAME SIZE, release NAME, status,\n"
-              "          register NAME SIZE METADATA, unregister NAME,\n"
-              "          retain NAME, release_model NAME, models\n\n"
+              "          register NAME SIZE METADATA, register_file NAME PATH METADATA,\n"
+              "          unregister NAME, retain NAME, release_model NAME, models\n\n"
               "Residency commands:\n"
               "  load NAME\n"
               "  unload NAME\n"
-              "  residency\n";
+              "  residency\n"
+              "  share NAME\n"
+              "  metrics\n";
 }
 
 bool write_all(int fd, std::string_view data) {
@@ -100,7 +102,8 @@ int main(int argc, char* argv[]) {
     bool response_complete = false;
     const bool multiline = parsed.command.type == gpumemd::CommandType::Status ||
                            parsed.command.type == gpumemd::CommandType::Models ||
-                           parsed.command.type == gpumemd::CommandType::Residency;
+                           parsed.command.type == gpumemd::CommandType::Residency ||
+                           parsed.command.type == gpumemd::CommandType::Metrics;
     while (true) {
         const ssize_t count = read(fd, buffer, sizeof(buffer));
         if (count > 0) {
