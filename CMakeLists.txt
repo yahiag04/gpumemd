@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(gpumemd VERSION 0.8.0 LANGUAGES CXX)
+project(gpumemd VERSION 0.9.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -40,7 +40,10 @@ endif()
 if(CMAKE_CUDA_COMPILER)
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
-    add_library(gpumemd_cuda STATIC src/backend/cuda_backend.cu)
+    add_library(gpumemd_cuda STATIC
+        src/backend/cuda_backend.cu
+        src/backend/cuda_ipc_client.cu
+    )
     target_include_directories(gpumemd_cuda PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
     )
@@ -155,6 +158,13 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME cuda_backend COMMAND cuda_backend_test)
         set_tests_properties(cuda_backend PROPERTIES TIMEOUT 10)
+
+        add_executable(cuda_ipc_test tests/cuda_ipc_test.cu)
+        target_link_libraries(cuda_ipc_test PRIVATE gpumemd_cuda)
+        set_target_properties(cuda_ipc_test PROPERTIES CUDA_STANDARD 20
+                              CUDA_STANDARD_REQUIRED YES)
+        add_test(NAME cuda_ipc COMMAND cuda_ipc_test)
+        set_tests_properties(cuda_ipc PROPERTIES TIMEOUT 10)
     endif()
 
     add_executable(protocol_test tests/protocol_test.cpp)

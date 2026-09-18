@@ -19,6 +19,7 @@ enum class BackendError {
     DeviceUnavailable,
     AllocationFailed,
     RuntimeFailure,
+    Unsupported,
 };
 
 struct BackendOperationResult {
@@ -37,6 +38,14 @@ struct BackendSnapshot {
     std::vector<BackendAllocation> allocations;
 };
 
+struct BackendShareResult {
+    BackendError error{BackendError::None};
+    Bytes amount{0};
+    std::string token;
+
+    [[nodiscard]] bool ok() const noexcept { return error == BackendError::None; }
+};
+
 class AcceleratorBackend {
 public:
     virtual ~AcceleratorBackend() = default;
@@ -49,6 +58,7 @@ public:
     [[nodiscard]] virtual BackendOperationResult load(
         std::string_view id, std::span<const std::byte> data) = 0;
     [[nodiscard]] virtual BackendOperationResult unload(std::string_view id) = 0;
+    [[nodiscard]] virtual BackendShareResult share(std::string_view id) = 0;
     [[nodiscard]] virtual bool is_loaded(std::string_view id) const = 0;
     [[nodiscard]] virtual BackendSnapshot snapshot() const = 0;
 

@@ -181,6 +181,17 @@ ParseResult parse_command(std::string_view line) {
         return {ParseError::None, {CommandType::Residency}};
     }
 
+    if (tokens[0] == "share") {
+        if (tokens.size() != 2 || !valid_name(tokens[1])) {
+            return error(tokens.size() == 2 ? ParseError::InvalidModelId
+                                            : ParseError::InvalidRequest);
+        }
+        Command command;
+        command.type = CommandType::Share;
+        command.name = std::string(tokens[1]);
+        return {ParseError::None, std::move(command)};
+    }
+
     if (tokens[0] == "register") {
         if (tokens.size() != 4) {
             return error(ParseError::InvalidRequest);
@@ -409,6 +420,8 @@ std::string format_model_operation_result(std::string_view action,
         return "ERR read_failure could not read model file\n";
     case ModelError::BackendFailure:
         return "ERR backend_failure accelerator backend operation failed\n";
+    case ModelError::BackendUnsupported:
+        return "ERR unsupported backend does not support process sharing\n";
     case ModelError::None:
         break;
     }
@@ -435,6 +448,26 @@ std::string format_residency_operation_result(std::string_view action,
                                               std::string_view name,
                                               const ModelOperationResult& result) {
     return format_model_operation_result(action, name, result);
+}
+
+std::string format_share_result(std::string_view name, const ModelShareResult& result) {
+    if (result.ok()) {
+        std::ostringstream output;
+        output << "OK shared " << name << ' ' << result.amount << ' ' << result.token << '\n';
+        return output.str();
+    }
+    switch (result.error) {
+    case ModelError::UnknownModel:
+        return "ERR unknown_model model not found\n";
+    case ModelError::UnknownResidency:
+        return "ERR unknown_residency model is not resident\n";
+    case ModelError::BackendUnsupported:
+        return "ERR unsupported backend does not support process sharing\n";
+    case ModelError::BackendFailure:
+        return "ERR backend_failure accelerator backend operation failed\n";
+    default:
+        return "ERR internal_error internal model sharing error\n";
+    }
 }
 
 std::string format_residency(const ResidencySnapshot& snapshot) {

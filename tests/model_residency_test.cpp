@@ -23,6 +23,7 @@ void loads_and_unloads_once() {
     assert(registry.register_model("bert", 60, "base").ok());
     assert(residency.load("bert").amount == 60);
     assert(backend.is_loaded("bert"));
+    assert(residency.share("bert").error == ModelError::BackendUnsupported);
     assert(resources.status().used == 60);
     assert(residency.load("bert").amount == 60);
     assert(resources.status().used == 60);

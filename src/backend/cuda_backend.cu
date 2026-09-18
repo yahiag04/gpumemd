@@ -3,6 +3,8 @@
 #include <cuda_runtime_api.h>
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <limits>
 #include <mutex>
 #include <string>
@@ -128,6 +130,28 @@ BackendOperationResult CUDABackend::unload(std::string_view id) {
     const Bytes bytes = iterator->second.bytes;
     impl_->allocations.erase(iterator);
     return {BackendError::None, bytes};
+}
+
+BackendShareResult CUDABackend::share(std::string_view id) {
+    std::lock_guard lock(impl_->mutex);
+    const auto iterator = impl_->allocations.find(std::string(id));
+    if (iterator == impl_->allocations.end()) {
+        return {BackendError::NotLoaded, 0, {}};
+    }
+
+    cudaIpcMemHandle_t handle{};
+    if (cudaIpcGetMemHandle(&handle, iterator->second.pointer) != cudaSuccess) {
+        return {BackendError::RuntimeFailure, 0, {}};
+    }
+    static constexpr char digits[] = "0123456789abcdef";
+    const auto* bytes = reinterpret_cast<const unsigned char*>(&handle);
+    std::string token;
+    token.reserve(sizeof(handle) * 2);
+    for (std::size_t index = 0; index < sizeof(handle); ++index) {
+        token.push_back(digits[bytes[index] >> 4]);
+        token.push_back(digits[bytes[index] & 0x0f]);
+    }
+    return {BackendError::None, iterator->second.bytes, std::move(token)};
 }
 
 bool CUDABackend::is_loaded(std::string_view id) const {
