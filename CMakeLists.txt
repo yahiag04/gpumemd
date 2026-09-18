@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(gpumemd VERSION 0.11.0 LANGUAGES CXX)
+project(gpumemd VERSION 0.12.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -14,6 +14,7 @@ add_library(gpumemd_core STATIC
     src/core/model_registry.cpp
     src/core/model_loader.cpp
     src/core/memory_allocator.cpp
+    src/core/device_placement.cpp
     src/core/model_residency.cpp
     src/core/resource_manager.cpp
 )
@@ -148,6 +149,14 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME memory_allocator COMMAND memory_allocator_test)
     set_tests_properties(memory_allocator PROPERTIES TIMEOUT 10)
+
+    add_executable(device_placement_test tests/device_placement_test.cpp)
+    target_link_libraries(device_placement_test PRIVATE gpumemd_core)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(device_placement_test PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME device_placement COMMAND device_placement_test)
+    set_tests_properties(device_placement PROPERTIES TIMEOUT 10)
 
     if(APPLE)
         add_executable(metal_backend_test tests/metal_backend_test.cpp)
