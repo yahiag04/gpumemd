@@ -4,6 +4,7 @@
 #include "gpumemd/model_loader.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <utility>
 
 namespace gpumemd {
@@ -55,7 +56,14 @@ ModelOperationResult ModelResidencyManager::load(std::string_view id) {
         }
         std::sort(evictions.begin(), evictions.end(),
                   [](const ResidencyRecord* left, const ResidencyRecord* right) {
-                      return left->last_loaded < right->last_loaded;
+                      const auto score = [](const ResidencyRecord* record) {
+                          const auto cost = std::max<std::uint64_t>(
+                              record->estimated_load_cost_ms, 1);
+                          const auto history = record->load_count + 1;
+                          return static_cast<long double>(record->last_loaded) * cost * history /
+                                 std::max<Bytes>(record->footprint_bytes, 1);
+                      };
+                      return score(left) < score(right);
                   });
         std::size_t needed_count = 0;
         while (available < model->footprint_bytes && needed_count < evictions.size()) {
@@ -76,6 +84,7 @@ ModelOperationResult ModelResidencyManager::load(std::string_view id) {
         eviction_ids.push_back(record->id);
     }
 
+    const auto load_started = std::chrono::steady_clock::now();
     ModelLoadResult file_data;
     BackendOperationResult loaded;
     if (model->source_path.empty()) {
@@ -100,6 +109,10 @@ ModelOperationResult ModelResidencyManager::load(std::string_view id) {
     if (!loaded.ok()) {
         return {ModelError::BackendFailure, 0};
     }
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - load_started);
+    const auto load_cost_ms = std::max<std::uint64_t>(
+        static_cast<std::uint64_t>(elapsed.count()), 1);
 
     const auto acquired = resources_.replace_model_reservations(
         eviction_ids, model->id, model->footprint_bytes);
@@ -112,9 +125,14 @@ ModelOperationResult ModelResidencyManager::load(std::string_view id) {
         (void)backend_.unload(record->id);
         record->resident = false;
     }
-    records_.insert_or_assign(model->id,
-                              ResidencyRecord{model->id, model->footprint_bytes,
-                                              model->ref_count, true, ++next_loaded_});
+    auto& record = records_[model->id];
+    record.id = model->id;
+    record.footprint_bytes = model->footprint_bytes;
+    record.ref_count = model->ref_count;
+    record.resident = true;
+    record.last_loaded = ++next_loaded_;
+    ++record.load_count;
+    record.estimated_load_cost_ms = load_cost_ms;
     return {ModelError::None, model->footprint_bytes};
 }
 
