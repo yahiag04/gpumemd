@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(gpumemd VERSION 0.16.0 LANGUAGES CXX)
+project(gpumemd VERSION 0.17.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -47,6 +47,7 @@ if(CMAKE_CUDA_COMPILER)
     add_library(gpumemd_cuda STATIC
         src/backend/cuda_backend.cu
         src/backend/cuda_ipc_client.cu
+        src/backend/cuda_client.cu
     )
     target_include_directories(gpumemd_cuda PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -55,7 +56,7 @@ if(CMAKE_CUDA_COMPILER)
         CUDA_STANDARD 20
         CUDA_STANDARD_REQUIRED YES
     )
-    target_link_libraries(gpumemd_cuda PUBLIC CUDA::cudart)
+    target_link_libraries(gpumemd_cuda PUBLIC CUDA::cudart gpumemd_client)
 endif()
 
 add_library(gpumemd_protocol STATIC src/protocol/protocol.cpp)

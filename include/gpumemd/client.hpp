@@ -5,6 +5,7 @@
 
 #include <string>
 #include <string_view>
+#include <optional>
 
 namespace gpumemd {
 
@@ -17,6 +18,14 @@ struct ClientResponse {
 
     [[nodiscard]] bool ok() const noexcept { return error == ClientError::None; }
 };
+
+struct ShareDescriptor {
+    Bytes bytes{0};
+    std::string token;
+};
+
+[[nodiscard]] std::optional<ShareDescriptor> parse_share_response(
+    std::string_view response);
 
 class Client final {
 public:

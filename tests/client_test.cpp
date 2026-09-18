@@ -20,6 +20,13 @@ std::string socket_path() {
 } // namespace
 
 int main() {
+    const auto descriptor = gpumemd::parse_share_response(
+        "OK shared bert 4096 0011aabb\n");
+    assert(descriptor.has_value());
+    assert(descriptor->bytes == 4096);
+    assert(descriptor->token == "0011aabb");
+    assert(!gpumemd::parse_share_response("ERR unknown_residency model is not resident\n"));
+
     const std::string path = socket_path();
     unlink(path.c_str());
     gpumemd::ResourceManager manager(1024);
