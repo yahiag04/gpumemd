@@ -3,7 +3,7 @@
 A simulated GPU resource and model-residency broker being built incrementally
 in modern C++, with no CUDA or Metal dependency yet.
 
-**Current state: v0.11 implemented.** CMake builds the daemon, the independent
+**Current state: v0.12 implemented.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
@@ -24,6 +24,9 @@ coalescing, while keeping direct accounting available for simpler callers.
 The v0.11 scheduler preserves priority/FIFO behavior by default and adds an
 optional cost-aware policy. Use `--scheduling cost` and pass an estimated load
 cost as the sixth field of `acquire NAME SIZE PRIORITY TIMEOUT COST_MS`.
+The v0.12 `DevicePlacement` service selects the least-used device with enough
+capacity and tracks model-to-device assignments without changing the existing
+single-device backend behavior.
 
 ## Build and test
 
