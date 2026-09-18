@@ -27,6 +27,7 @@ enum class ModelError {
     FileUnavailable,
     SourceChanged,
     ReadFailure,
+    BackendUnsupported,
 };
 
 struct ModelOperationResult {

@@ -3,13 +3,13 @@
 A simulated GPU resource and model-residency broker being built incrementally
 in modern C++, with no CUDA or Metal dependency yet.
 
-**Current state: v0.8 implemented.** CMake builds the daemon, the independent
+**Current state: v0.9 implemented.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
 CLI behavior, and Unix socket integration.
 
-v0.8 supports optional NVIDIA CUDA allocations when CMake finds a CUDA compiler
+v0.9 supports optional NVIDIA CUDA allocations when CMake finds a CUDA compiler
 and toolkit. macOS continues to use Metal, and systems without a usable
 accelerator continue to use the mock backend. It does not parse model formats
 or run model kernels.
@@ -89,6 +89,18 @@ its bytes into the selected accelerator backend. Paths and metadata are single
 tokens; quoting and whitespace in paths are not supported by the text protocol.
 `models` includes the source path for file-backed records.
 
+`share NAME` exports a resident CUDA allocation as a hexadecimal CUDA IPC token:
+
+```sh
+./build/gpumemctl --socket /tmp/gpumemd.sock share bert
+```
+
+The token is valid only while the daemon keeps the model resident. It can be
+opened from another CUDA process through `CudaIpcClient`, then closed in that
+process. Mock and Metal backends report `unsupported`; CUDA IPC currently uses
+device 0 and does not provide persistence, authentication, networking, or
+multi-GPU routing.
+
 `load NAME` explicitly makes a registered model resident and reserves its
 declared footprint under `model:NAME`; `unload NAME` explicitly releases that
 reservation. Loading an already resident model is idempotent. `residency`
@@ -134,11 +146,11 @@ resident.
 - `src/client/`: `gpumemctl` command-line client.
 - `tests/`: CTest checks for core accounting, parsing, CLI behavior, and IPC.
 
-The v0.8 acceptance demonstration combines concurrent resource clients with
+The v0.9 acceptance demonstration combines concurrent resource clients with
 three registered models, explicit loads, refcount protection, LRU eviction,
 and complete unload/release/unregister cleanup. Final `status` should report
 used `0` and all configured capacity free.
 
-Model-format parsing, model kernels, CUDA IPC, and multi-GPU support remain
-future work. CUDA builds select device 0 only and are enabled only when `nvcc`
-and the CUDA toolkit are available at configure time.
+Model-format parsing, model kernels, and multi-GPU support remain future work.
+CUDA builds select device 0 only and are enabled only when `nvcc` and the CUDA
+toolkit are available at configure time.

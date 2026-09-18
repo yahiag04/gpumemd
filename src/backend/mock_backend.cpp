@@ -52,6 +52,11 @@ BackendOperationResult MockBackend::unload(std::string_view id) {
     return {BackendError::None, bytes};
 }
 
+BackendShareResult MockBackend::share(std::string_view id) {
+    (void)id;
+    return {BackendError::Unsupported, 0, {}};
+}
+
 bool MockBackend::is_loaded(std::string_view id) const {
     std::lock_guard lock(mutex_);
     return allocations_.contains(std::string(id));

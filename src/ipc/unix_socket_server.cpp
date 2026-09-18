@@ -88,6 +88,8 @@ std::string dispatch(ResourceManager& manager, ModelRegistry& registry,
                                                  residency.unload(command.name));
     case CommandType::Residency:
         return format_residency(residency.residency());
+    case CommandType::Share:
+        return format_share_result(command.name, residency.share(command.name));
     }
     return "ERR internal_error unknown command type\n";
 }

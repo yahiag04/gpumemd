@@ -87,6 +87,11 @@ BackendOperationResult MetalBackend::unload(std::string_view id) {
     return {BackendError::None, bytes};
 }
 
+BackendShareResult MetalBackend::share(std::string_view id) {
+    (void)id;
+    return {BackendError::Unsupported, 0, {}};
+}
+
 bool MetalBackend::is_loaded(std::string_view id) const {
     std::lock_guard lock(impl_->mutex);
     return impl_->buffers.contains(std::string(id));

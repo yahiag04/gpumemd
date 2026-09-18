@@ -17,6 +17,7 @@ enum class CommandType {
     Status,
     RegisterModel,
     RegisterFile,
+    Share,
     UnregisterModel,
     RetainModel,
     ReleaseModel,
@@ -69,6 +70,8 @@ struct ParseResult {
                                                          std::string_view name,
                                                          const ModelOperationResult& result);
 [[nodiscard]] std::string format_models(const ModelSnapshot& snapshot);
+[[nodiscard]] std::string format_share_result(std::string_view name,
+                                               const ModelShareResult& result);
 [[nodiscard]] std::string format_residency_operation_result(
     std::string_view action,
     std::string_view name,

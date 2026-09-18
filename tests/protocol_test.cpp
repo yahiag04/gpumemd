@@ -17,6 +17,7 @@ using gpumemd::StatusSnapshot;
 using gpumemd::Reservation;
 using gpumemd::ModelError;
 using gpumemd::ModelOperationResult;
+using gpumemd::ModelShareResult;
 using gpumemd::ModelRecord;
 using gpumemd::ModelSnapshot;
 using gpumemd::ResidencySnapshot;
@@ -24,6 +25,7 @@ using gpumemd::format_model_operation_result;
 using gpumemd::format_models;
 using gpumemd::format_residency;
 using gpumemd::format_residency_operation_result;
+using gpumemd::format_share_result;
 using gpumemd::parse_command;
 using gpumemd::parse_bytes;
 
@@ -165,6 +167,9 @@ void parses_model_commands() {
     result = parse_command("register_file bert /tmp/bert.bin bert-base");
     assert(result.ok() && result.command.type == CommandType::RegisterFile);
     assert(result.command.path == "/tmp/bert.bin");
+    result = parse_command("share bert");
+    assert(result.ok() && result.command.type == CommandType::Share);
+    assert(result.command.name == "bert");
 }
 
 void rejects_invalid_model_commands() {
@@ -191,6 +196,9 @@ void formats_model_wire_responses() {
     assert(format_model_operation_result("loaded", "bert",
                                          ModelOperationResult{ModelError::BackendFailure, 0}) ==
            "ERR backend_failure accelerator backend operation failed\n");
+    assert(format_share_result("bert",
+                               ModelShareResult{ModelError::BackendUnsupported, 0, {}}) ==
+           "ERR unsupported backend does not support process sharing\n");
     assert(format_model_operation_result("retained", "bert",
                                          ModelOperationResult{ModelError::None, 1}) ==
            "OK retained bert 1\n");

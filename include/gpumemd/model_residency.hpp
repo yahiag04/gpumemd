@@ -26,6 +26,14 @@ struct ResidencySnapshot {
     std::vector<ResidencyRecord> records;
 };
 
+struct ModelShareResult {
+    ModelError error{ModelError::None};
+    Bytes amount{0};
+    std::string token;
+
+    [[nodiscard]] bool ok() const noexcept { return error == ModelError::None; }
+};
+
 class ModelResidencyManager {
 public:
     ModelResidencyManager(ModelRegistry& registry, ResourceManager& resources);
@@ -34,6 +42,7 @@ public:
 
     [[nodiscard]] ModelOperationResult load(std::string_view id);
     [[nodiscard]] ModelOperationResult unload(std::string_view id);
+    [[nodiscard]] ModelShareResult share(std::string_view id);
     [[nodiscard]] ModelOperationResult retain(std::string_view id);
     [[nodiscard]] ModelOperationResult release_model(std::string_view id);
     [[nodiscard]] ModelOperationResult unregister_model(std::string_view id);

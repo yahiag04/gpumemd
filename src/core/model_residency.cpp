@@ -146,6 +146,28 @@ ModelOperationResult ModelResidencyManager::unload(std::string_view id) {
     return {ModelError::None, iterator->second.footprint_bytes};
 }
 
+ModelShareResult ModelResidencyManager::share(std::string_view id) {
+    std::lock_guard lock(mutex_);
+    auto models = registry_.models();
+    const auto* model = find_model(models, id);
+    if (model == nullptr) {
+        return {ModelError::UnknownModel, 0, {}};
+    }
+    const auto iterator = records_.find(std::string(id));
+    if (iterator == records_.end() || !iterator->second.resident) {
+        return {ModelError::UnknownResidency, 0, {}};
+    }
+
+    const auto shared = backend_.share(id);
+    if (!shared.ok()) {
+        if (shared.error == BackendError::Unsupported) {
+            return {ModelError::BackendUnsupported, 0, {}};
+        }
+        return {ModelError::BackendFailure, 0, {}};
+    }
+    return {ModelError::None, shared.amount, shared.token};
+}
+
 ModelOperationResult ModelResidencyManager::retain(std::string_view id) {
     std::lock_guard lock(mutex_);
     auto models = registry_.models();
