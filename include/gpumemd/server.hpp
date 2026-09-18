@@ -3,6 +3,7 @@
 #include "gpumemd/model_registry.hpp"
 #include "gpumemd/model_residency.hpp"
 #include "gpumemd/metrics.hpp"
+#include "gpumemd/node_registry.hpp"
 #include "gpumemd/resource_manager.hpp"
 
 #include <atomic>
@@ -15,7 +16,7 @@ class UnixSocketServer final {
 public:
     UnixSocketServer(ResourceManager& manager, ModelRegistry& registry,
                      ModelResidencyManager& residency, std::string socket_path,
-                     Metrics* metrics = nullptr);
+                     Metrics* metrics = nullptr, NodeRegistry* nodes = nullptr);
     ~UnixSocketServer();
 
     UnixSocketServer(const UnixSocketServer&) = delete;
@@ -31,6 +32,7 @@ private:
     ModelResidencyManager& residency_;
     std::string socket_path_;
     Metrics* metrics_{nullptr};
+    NodeRegistry* nodes_{nullptr};
     std::atomic<bool> stop_requested_{false};
     int listen_fd_{-1};
 };

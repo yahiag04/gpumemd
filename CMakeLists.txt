@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(gpumemd VERSION 0.14.0 LANGUAGES CXX)
+project(gpumemd VERSION 0.15.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -16,6 +16,7 @@ add_library(gpumemd_core STATIC
     src/core/memory_allocator.cpp
     src/core/device_placement.cpp
     src/core/metrics.cpp
+    src/core/node_registry.cpp
     src/core/model_residency.cpp
     src/core/resource_manager.cpp
 )
@@ -157,6 +158,10 @@ if(BUILD_TESTING)
         target_compile_options(device_placement_test PRIVATE -Wall -Wextra -Wpedantic)
     endif()
     add_test(NAME device_placement COMMAND device_placement_test)
+
+    add_executable(node_registry_test tests/node_registry_test.cpp)
+    target_link_libraries(node_registry_test PRIVATE gpumemd_core)
+    add_test(NAME node_registry COMMAND node_registry_test)
     set_tests_properties(device_placement PROPERTIES TIMEOUT 10)
 
     if(APPLE)

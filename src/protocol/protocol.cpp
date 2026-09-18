@@ -197,6 +197,36 @@ ParseResult parse_command(std::string_view line) {
         return {ParseError::None, {CommandType::Metrics}};
     }
 
+    if (tokens[0] == "nodes") {
+        if (tokens.size() != 1) return error(ParseError::InvalidRequest);
+        return {ParseError::None, {CommandType::Nodes}};
+    }
+
+    if (tokens[0] == "node_register") {
+        if (tokens.size() != 4 || !valid_name(tokens[1])) {
+            return error(tokens.size() == 4 ? ParseError::InvalidName
+                                            : ParseError::InvalidRequest);
+        }
+        const auto capacity = parse_size(tokens[3]);
+        if (!capacity || tokens[2].empty() || tokens[2].size() > 256) {
+            return error(!capacity ? ParseError::InvalidSize : ParseError::InvalidRequest);
+        }
+        Command command;
+        command.type = CommandType::RegisterNode;
+        command.name = std::string(tokens[1]);
+        command.path = std::string(tokens[2]);
+        command.bytes = *capacity;
+        return {ParseError::None, std::move(command)};
+    }
+
+    if (tokens[0] == "node_remove") {
+        if (tokens.size() != 2 || !valid_name(tokens[1])) {
+            return error(tokens.size() == 2 ? ParseError::InvalidName
+                                            : ParseError::InvalidRequest);
+        }
+        return {ParseError::None, {CommandType::UnregisterNode, std::string(tokens[1])}};
+    }
+
     if (tokens[0] == "register") {
         if (tokens.size() != 4) {
             return error(ParseError::InvalidRequest);
@@ -453,6 +483,44 @@ std::string format_metrics(const MetricsSnapshot& snapshot) {
            << "acquired_bytes " << snapshot.acquired_bytes << '\n'
            << "released_bytes " << snapshot.released_bytes << '\n'
            << "END\n";
+    return output.str();
+}
+
+std::string format_node_operation_result(std::string_view action,
+                                         std::string_view name,
+                                         const NodeOperationResult& result) {
+    if (result.ok()) {
+        std::ostringstream output;
+        output << "OK " << action << ' ' << name;
+        if (result.amount != 0) output << ' ' << result.amount;
+        output << '\n';
+        return output.str();
+    }
+    switch (result.error) {
+    case NodeError::DuplicateNode:
+        return "ERR duplicate_node node already registered\n";
+    case NodeError::UnknownNode:
+        return "ERR unknown_node node not found\n";
+    case NodeError::InvalidCapacity:
+        return "ERR invalid_size invalid node capacity\n";
+    case NodeError::InvalidEndpoint:
+        return "ERR invalid_endpoint invalid node endpoint\n";
+    case NodeError::InvalidId:
+        return "ERR invalid_name invalid node ID\n";
+    case NodeError::None:
+        break;
+    }
+    return "ERR internal_error internal node registry error\n";
+}
+
+std::string format_nodes(const NodeSnapshot& snapshot) {
+    std::ostringstream output;
+    output << "OK nodes " << snapshot.nodes.size() << '\n';
+    for (const auto& node : snapshot.nodes) {
+        output << "NODE " << node.id << ' ' << node.endpoint << ' ' << node.capacity << ' '
+               << node.used << ' ' << (node.healthy ? "healthy" : "unhealthy") << '\n';
+    }
+    output << "END\n";
     return output.str();
 }
 

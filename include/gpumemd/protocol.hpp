@@ -4,6 +4,7 @@
 #include "gpumemd/model_registry.hpp"
 #include "gpumemd/model_residency.hpp"
 #include "gpumemd/metrics.hpp"
+#include "gpumemd/node_registry.hpp"
 #include "gpumemd/resource_manager.hpp"
 
 #include <optional>
@@ -20,6 +21,9 @@ enum class CommandType {
     RegisterFile,
     Share,
     Metrics,
+    RegisterNode,
+    UnregisterNode,
+    Nodes,
     UnregisterModel,
     RetainModel,
     ReleaseModel,
@@ -75,6 +79,10 @@ struct ParseResult {
 [[nodiscard]] std::string format_share_result(std::string_view name,
                                                const ModelShareResult& result);
 [[nodiscard]] std::string format_metrics(const MetricsSnapshot& snapshot);
+[[nodiscard]] std::string format_node_operation_result(std::string_view action,
+                                                        std::string_view name,
+                                                        const NodeOperationResult& result);
+[[nodiscard]] std::string format_nodes(const NodeSnapshot& snapshot);
 [[nodiscard]] std::string format_residency_operation_result(
     std::string_view action,
     std::string_view name,
