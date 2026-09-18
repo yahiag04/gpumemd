@@ -3,7 +3,7 @@
 A simulated GPU resource and model-residency broker being built incrementally
 in modern C++, with no CUDA or Metal dependency yet.
 
-**Current state: v0.9 implemented.** CMake builds the daemon, the independent
+**Current state: v0.10 implemented.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
@@ -19,6 +19,8 @@ The accelerator boundary is represented by `AcceleratorBackend`; `MockBackend`
 tracks simulated model loads and unloads, while `MetalBackend` allocates one
 shared `MTLBuffer` per resident model and `CUDABackend` allocates one CUDA
 device buffer per resident model.
+The v0.10 `MemoryAllocator` provides pool allocation with block reuse and
+coalescing, while keeping direct accounting available for simpler callers.
 
 ## Build and test
 
