@@ -184,6 +184,9 @@ void formats_model_wire_responses() {
     assert(format_model_operation_result("registered", "bert",
                                          ModelOperationResult{ModelError::None, 7000000000}) ==
            "OK registered bert 7000000000\n");
+    assert(format_model_operation_result("loaded", "bert",
+                                         ModelOperationResult{ModelError::BackendFailure, 0}) ==
+           "ERR backend_failure accelerator backend operation failed\n");
     assert(format_model_operation_result("retained", "bert",
                                          ModelOperationResult{ModelError::None, 1}) ==
            "OK retained bert 1\n");

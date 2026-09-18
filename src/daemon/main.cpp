@@ -1,5 +1,6 @@
 #include "gpumemd/model_registry.hpp"
 #include "gpumemd/model_residency.hpp"
+#include "gpumemd/mock_backend.hpp"
 #include "gpumemd/protocol.hpp"
 #include "gpumemd/resource_manager.hpp"
 #include "gpumemd/server.hpp"
@@ -60,7 +61,8 @@ int main(int argc, char* argv[]) {
     try {
         gpumemd::ResourceManager manager(*capacity);
         gpumemd::ModelRegistry registry;
-        gpumemd::ModelResidencyManager residency(registry, manager);
+        gpumemd::MockBackend backend;
+        gpumemd::ModelResidencyManager residency(registry, manager, backend);
         gpumemd::UnixSocketServer server(manager, registry, residency, socket_path);
         std::signal(SIGINT, handle_signal);
         std::signal(SIGTERM, handle_signal);

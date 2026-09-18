@@ -1,5 +1,7 @@
 #include "gpumemd/model_residency.hpp"
 
+#include "gpumemd/mock_backend.hpp"
+
 #include <algorithm>
 #include <utility>
 
@@ -7,7 +9,13 @@ namespace gpumemd {
 
 ModelResidencyManager::ModelResidencyManager(ModelRegistry& registry,
                                              ResourceManager& resources)
-    : registry_(registry), resources_(resources) {}
+    : registry_(registry), resources_(resources),
+      owned_backend_(std::make_unique<MockBackend>()), backend_(*owned_backend_) {}
+
+ModelResidencyManager::ModelResidencyManager(ModelRegistry& registry,
+                                             ResourceManager& resources,
+                                             AcceleratorBackend& backend)
+    : registry_(registry), resources_(resources), backend_(backend) {}
 
 ModelRecord* ModelResidencyManager::find_model(ModelSnapshot& snapshot, std::string_view id) {
     const auto iterator = std::find_if(snapshot.models.begin(), snapshot.models.end(),
@@ -66,13 +74,21 @@ ModelOperationResult ModelResidencyManager::load(std::string_view id) {
     for (const auto* record : evictions) {
         eviction_ids.push_back(record->id);
     }
+
+    const auto loaded = backend_.load(model->id, model->footprint_bytes);
+    if (!loaded.ok()) {
+        return {ModelError::BackendFailure, 0};
+    }
+
     const auto acquired = resources_.replace_model_reservations(
         eviction_ids, model->id, model->footprint_bytes);
     if (!acquired.ok()) {
+        (void)backend_.unload(model->id);
         return {ModelError::InsufficientMemory, 0};
     }
 
     for (auto* record : evictions) {
+        (void)backend_.unload(record->id);
         record->resident = false;
     }
     records_.insert_or_assign(model->id,
@@ -95,8 +111,14 @@ ModelOperationResult ModelResidencyManager::unload(std::string_view id) {
         return {ModelError::ModelInUse, 0};
     }
 
+    const auto unloaded = backend_.unload(id);
+    if (!unloaded.ok()) {
+        return {ModelError::BackendFailure, 0};
+    }
+
     const auto released = resources_.release_model(id);
     if (!released.ok()) {
+        (void)backend_.load(id, iterator->second.footprint_bytes);
         return {ModelError::UnknownResidency, 0};
     }
     iterator->second.resident = false;

@@ -1,12 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(gpumemd VERSION 0.1.0 LANGUAGES CXX)
+project(gpumemd VERSION 0.5.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Hardware-independent resource accounting lives in this library.
 add_library(gpumemd_core STATIC
+    src/backend/mock_backend.cpp
     src/core/model_registry.cpp
     src/core/model_residency.cpp
     src/core/resource_manager.cpp
@@ -68,6 +69,14 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME model_residency COMMAND model_residency_test)
     set_tests_properties(model_residency PROPERTIES TIMEOUT 10)
+
+    add_executable(mock_backend_test tests/mock_backend_test.cpp)
+    target_link_libraries(mock_backend_test PRIVATE gpumemd_core)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(mock_backend_test PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME mock_backend COMMAND mock_backend_test)
+    set_tests_properties(mock_backend PROPERTIES TIMEOUT 10)
 
     add_executable(protocol_test tests/protocol_test.cpp)
     target_link_libraries(protocol_test PRIVATE gpumemd_protocol)
