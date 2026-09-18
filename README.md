@@ -3,17 +3,20 @@
 A simulated GPU resource and model-residency broker being built incrementally
 in modern C++, with no CUDA or Metal dependency yet.
 
-**Current state: v0.5 implemented.** CMake builds the daemon, the independent
+**Current state: v0.6 implemented.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
 CLI behavior, and Unix socket integration.
 
-v0.5 is simulation-only: it does not load model files or allocate GPU memory.
+v0.6 supports a real Apple Metal buffer backend when built and run on macOS;
+other platforms and systems without a Metal device continue to use the mock
+backend. It does not load model files or run model kernels.
 Model footprints and residency consume logical reservations in the daemon's
 configured capacity so residency policy can be exercised without hardware.
 The accelerator boundary is represented by `AcceleratorBackend`; `MockBackend`
-tracks simulated model loads and unloads without adding a hardware dependency.
+tracks simulated model loads and unloads, while `MetalBackend` allocates one
+shared `MTLBuffer` per resident model.
 
 ## Build and test
 
@@ -101,17 +104,17 @@ of at most 128 bytes; quoting and whitespace are not supported.
 - `include/gpumemd/`: public core types and the resource/registry APIs.
 - `src/core/`: hardware-independent resource, registry, and residency logic.
 - `include/gpumemd/accelerator_backend.hpp` and `src/backend/`: accelerator
-  backend contract and the simulated `MockBackend` implementation.
+  backend contract, simulated `MockBackend`, and optional Metal implementation.
 - `include/gpumemd/protocol.hpp` and `src/protocol/`: text-command parser.
 - `src/daemon/`: daemon entry point and option handling.
 - `include/gpumemd/server.hpp` and `src/ipc/`: multi-client Unix socket server.
 - `src/client/`: `gpumemctl` command-line client.
 - `tests/`: CTest checks for core accounting, parsing, CLI behavior, and IPC.
 
-The v0.5 acceptance demonstration combines concurrent resource clients with
+The v0.6 acceptance demonstration combines concurrent resource clients with
 three registered models, explicit loads, refcount protection, LRU eviction,
 and complete unload/release/unregister cleanup. Final `status` should report
 used `0` and all configured capacity free.
 
-Real model loading, GPU allocation, CUDA/Metal integration, and multi-GPU
-support remain future work.
+Real model loading, model kernels, CUDA integration, and multi-GPU support
+remain future work.
