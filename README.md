@@ -103,10 +103,6 @@ of at most 128 bytes; quoting and whitespace are not supported.
 - `include/gpumemd/server.hpp` and `src/ipc/`: multi-client Unix socket server.
 - `src/client/`: `gpumemctl` command-line client.
 - `tests/`: CTest checks for core accounting, parsing, CLI behavior, and IPC.
-- [Design](docs/design.md): planned architecture, classes, protocol, accounting
-  rules, test strategy, and future CUDA considerations.
-- [Template plan](docs/superpowers/plans/2026-09-11-template.md): starter checklist.
-- [AGENTS.md](AGENTS.md): project scope and roadmap.
 
 The v0.4 acceptance demonstration combines concurrent resource clients with
 three registered models, explicit loads, refcount protection, LRU eviction,
