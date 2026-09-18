@@ -25,6 +25,8 @@ enum class ErrorCode {
     InvalidTimeout,
 };
 
+enum class SchedulingPolicy { PriorityFifo, CostAware };
+
 struct OperationResult {
     ErrorCode error{ErrorCode::None};
     Bytes amount{0};
@@ -47,11 +49,13 @@ struct StatusSnapshot {
 struct AcquireOptions {
     int priority{0};
     std::chrono::milliseconds timeout{std::chrono::milliseconds::max()};
+    std::chrono::milliseconds estimated_cost{0};
 };
 
 class ResourceManager {
 public:
-    explicit ResourceManager(Bytes capacity);
+    explicit ResourceManager(Bytes capacity,
+                             SchedulingPolicy policy = SchedulingPolicy::PriorityFifo);
 
     [[nodiscard]] OperationResult acquire(std::string_view name, Bytes bytes,
                                          AcquireOptions options = {});
@@ -71,6 +75,7 @@ private:
         std::string name;
         Bytes bytes{0};
         int priority{0};
+        std::chrono::milliseconds estimated_cost{0};
         std::uint64_t sequence{0};
         Clock::time_point deadline{Clock::time_point::max()};
         bool completed{false};
@@ -82,6 +87,7 @@ private:
     void grant_waiters_locked(Clock::time_point now);
 
     const Bytes capacity_;
+    const SchedulingPolicy scheduling_policy_;
     Bytes used_{0};
     std::unordered_map<std::string, Bytes> reservations_;
     std::unordered_map<std::string, Bytes> model_reservations_;

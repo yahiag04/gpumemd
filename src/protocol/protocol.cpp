@@ -288,7 +288,7 @@ ParseResult parse_command(std::string_view line) {
     }
 
     if (tokens[0] == "acquire") {
-        if (tokens.size() < 3 || tokens.size() > 5) {
+        if (tokens.size() < 3 || tokens.size() > 6) {
             return error(ParseError::InvalidRequest);
         }
         if (!valid_name(tokens[1])) {
@@ -312,6 +312,13 @@ ParseResult parse_command(std::string_view line) {
                 return error(ParseError::InvalidRequest);
             }
             options.timeout = *timeout;
+        }
+        if (tokens.size() == 6) {
+            const auto cost = parse_timeout(tokens[5]);
+            if (!cost) {
+                return error(ParseError::InvalidRequest);
+            }
+            options.estimated_cost = *cost;
         }
         return {ParseError::None,
                 {CommandType::Acquire, std::string(tokens[1]), *bytes,
