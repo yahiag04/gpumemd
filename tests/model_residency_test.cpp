@@ -187,6 +187,21 @@ void reloading_uses_a_new_monotonic_load_order() {
     assert(snapshot.records[0].last_loaded > snapshot.records[1].last_loaded);
 }
 
+void tracks_load_history_for_predictive_eviction() {
+    ModelRegistry registry;
+    ResourceManager resources(100);
+    ModelResidencyManager residency(registry, resources);
+    assert(registry.register_model("bert", 30, "base").ok());
+    assert(residency.load("bert").ok());
+    assert(residency.unload("bert").ok());
+    assert(residency.load("bert").ok());
+
+    const auto snapshot = residency.residency();
+    assert(snapshot.records.size() == 1);
+    assert(snapshot.records[0].load_count == 2);
+    assert(snapshot.records[0].estimated_load_cost_ms >= 1);
+}
+
 void concurrent_retain_and_release_has_exact_final_refcount() {
     ModelRegistry registry;
     ResourceManager resources(100);
@@ -240,6 +255,7 @@ int main() {
     rejects_release_underflow();
     reserves_the_full_logical_model_label();
     reloading_uses_a_new_monotonic_load_order();
+    tracks_load_history_for_predictive_eviction();
     concurrent_retain_and_release_has_exact_final_refcount();
     std::cout << "model_residency_test: PASS\n";
     return 0;

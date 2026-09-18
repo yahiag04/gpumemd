@@ -20,6 +20,8 @@ struct ResidencyRecord {
     std::uint64_t ref_count{0};
     bool resident{false};
     std::uint64_t last_loaded{0};
+    std::uint64_t load_count{0};
+    std::uint64_t estimated_load_cost_ms{0};
 };
 
 struct ResidencySnapshot {

@@ -3,7 +3,7 @@
 A simulated GPU resource and model-residency broker being built incrementally
 in modern C++, with no CUDA or Metal dependency yet.
 
-**Current state: v0.13 implemented.** CMake builds the daemon, the independent
+**Current state: v0.14 implemented.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
@@ -29,6 +29,9 @@ capacity and tracks model-to-device assignments without changing the existing
 single-device backend behavior.
 The v0.13 daemon exposes thread-safe request counters through the `metrics`
 command without requiring an external metrics dependency.
+The v0.14 residency manager records load history and measured load cost, then
+uses those signals together with recency and footprint when selecting
+unreferenced models for eviction.
 
 ## Build and test
 
