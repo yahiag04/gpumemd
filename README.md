@@ -1,9 +1,10 @@
 # gpumemd
 
-A simulated GPU resource and model-residency broker being built incrementally
-in modern C++, with no CUDA or Metal dependency yet.
+A C++20 GPU resource and model-residency broker with optional NVIDIA CUDA
+and Apple Metal backends, plus a mock backend for hardware-independent use.
+It manages allocations and raw model-file residency; it does not run inference.
 
-**Current state: v0.18 implemented.** CMake builds the daemon, the independent
+**Current state: v0.18 implemented, with additional performance benchmarks.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
@@ -44,10 +45,32 @@ RAII when the wrapper is destroyed.
 The v0.18 CUDA demo performs an end-to-end IPC check by importing a resident
 allocation and executing `cudaMemset` from a separate process.
 
+## Implementation and validation status
+
+- Implemented: Unix socket daemon and CLI, C++ client API, resource accounting,
+  priority/FIFO and cost-aware scheduling, model registration and residency,
+  reference-count protection, and eviction informed by recency, load cost,
+  load history, and footprint.
+- Backends: mock accounting, Metal shared-buffer allocation, and optional CUDA
+  device allocation, raw-file transfer, and cross-process CUDA IPC import/export.
+  Metal cross-process sharing is not implemented.
+- Supporting components: pool allocator, device-placement accounting, request
+  counters, and remote-node registry. Device placement is not multi-GPU routing;
+  the node registry does not provide distributed transport or replication.
+- Locally verified: Release build and Metal cold/resident-load benchmarks on
+  Apple M4, plus socket latency measurements over 10,000 requests.
+- NVIDIA validation pending: the CUDA multiprocess memory comparison and IPC
+  timing worker have been added but have not been compiled or run on NVIDIA
+  hardware in this development environment. No measured CUDA memory savings
+  or CUDA latency results are claimed here.
+- Not implemented: model-format parsing, inference kernels, multi-GPU routing,
+  authentication, or persistent/distributed service operation.
+
 ## Build and test
 
-Requirements: CMake 3.20+ and a compiler supporting C++20. The intended v0.1
-platforms are macOS and Linux. There are no third-party dependencies to download.
+Requirements: CMake 3.20+ and a compiler supporting C++20, on macOS or Linux.
+Metal uses the macOS system framework; CUDA builds require the NVIDIA CUDA
+compiler and toolkit. The mock backend requires neither accelerator SDK.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
@@ -169,8 +192,9 @@ reservation. Loading an already resident model is idempotent. `residency`
 lists resident models with footprint, reference count, and monotonic load
 order. Registration and retention alone do not make a model resident.
 
-When a load needs capacity, the broker evicts the least-recently-loaded
-resident models first, but only models whose reference count is zero. A model
+When a load needs capacity, the broker ranks resident models using recency,
+measured load cost, load history, and footprint, and evicts only models whose
+reference count is zero. A model
 protected by `retain` cannot be evicted or explicitly unloaded until matching
 `release_model` calls return its reference count to zero. If enough capacity
 cannot be obtained, the load fails with `insufficient_memory` and preserves
@@ -216,3 +240,44 @@ used `0` and all configured capacity free.
 Model-format parsing, model kernels, and multi-GPU support remain future work.
 CUDA builds select device 0 only and are enabled only when `nvcc` and the CUDA
 toolkit are available at configure time.
+
+## Performance experiments
+
+Build in Release mode. `gpumemd-bench` now reports nearest-rank p50/p95/p99
+in nanoseconds for cold loads and at least 10,000 resident load calls, after
+1,000 warm-up calls. These are in-process idempotent loads, not inference.
+Clock overhead is included; filesystem caches are not flushed.
+
+For socket round trips (including connection establishment and Python overhead),
+register a disposable model in a running daemon, then run:
+
+```sh
+python3 scripts/benchmark.py --socket /tmp/gpumemd.sock --model bench
+```
+
+On a dedicated idle NVIDIA GPU, build the CUDA targets, start the daemon and
+register a disposable file-backed model named `bench`. Use the same file for
+independent workers and the broker:
+
+```sh
+./build/gpumemctl --socket /tmp/gpumemd.sock register_file bench /absolute/model.bin benchmark
+python3 scripts/benchmark.py --socket /tmp/gpumemd.sock --model bench \
+  --cuda-worker ./build/gpumemd-cuda-bench-worker --file /absolute/model.bin --processes 4
+./build/gpumemd-bench --file /absolute/model.bin --backend cuda --iterations 20
+```
+
+The comparison unloads this model and runs independent then shared workers.
+All N CUDA contexts initialize before the baseline. Workers stay alive until
+the GPU-wide resident measurement; shared mode includes the daemon allocation.
+`nvidia-smi` samples GPU 0 memory in MiB, avoiding double counting IPC mappings.
+Run with CUDA device visibility matching physical GPU 0 and no other workloads.
+Repeat for N=1,2,4,8 and several trials; compare `delta_mib` and report
+`1 - shared_delta / independent_delta`. Expected payload alone is N*S versus S;
+actual deltas include allocation granularity and IPC overhead. Negative/noisy
+deltas or insufficient VRAM invalidate a trial. Do not sum per-process RSS.
+
+Worker timings separate file read/allocation/copy or broker share+IPC open,
+explicit device synchronization, and close/free. Shared workers never mutate
+model data. Synchronization measures an idle-device barrier after synchronous
+loading, not cross-process producer/consumer synchronization. CUDA experiments
+require NVIDIA hardware and are not validated by a successful Metal run.
