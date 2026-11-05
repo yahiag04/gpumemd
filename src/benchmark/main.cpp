@@ -8,6 +8,8 @@
 #endif
 
 #include <chrono>
+#include <algorithm>
+#include <cmath>
 #include <charconv>
 #include <iomanip>
 #include <iostream>
@@ -19,6 +21,14 @@
 namespace {
 
 using Clock = std::chrono::steady_clock;
+
+void distribution(std::string_view name, std::vector<double> samples) {
+    std::sort(samples.begin(), samples.end());
+    for (const double q : {0.50, 0.95, 0.99}) {
+        const auto index = static_cast<std::size_t>(std::ceil(q * samples.size())) - 1;
+        std::cout << name << "_p" << static_cast<int>(q * 100) << "_ns " << samples[index] * 1e6 << '\n';
+    }
+}
 
 void usage(std::ostream& output) {
     output << "Usage: gpumemd-bench --file PATH [--iterations N] "
@@ -152,8 +162,12 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     std::vector<double> warm_samples;
-    warm_samples.reserve(iterations);
-    for (std::size_t iteration = 0; iteration < iterations; ++iteration) {
+    const auto warm_iterations = std::max<std::size_t>(iterations, 10000);
+    warm_samples.reserve(warm_iterations);
+    for (int i = 0; i < 1000; ++i) {
+        if (!residency.load("benchmark").ok()) return 1;
+    }
+    for (std::size_t iteration = 0; iteration < warm_iterations; ++iteration) {
         const auto start = Clock::now();
         if (!residency.load("benchmark").ok()) {
             std::cerr << "gpumemd-bench: warm load failed\n";
@@ -171,5 +185,8 @@ int main(int argc, char* argv[]) {
               << "iterations " << iterations << '\n'
               << "cold_avg_ms " << average_ms(cold_samples) << '\n'
               << "warm_avg_ms " << average_ms(warm_samples) << '\n';
+    std::cout << "warm_samples " << warm_iterations << '\n';
+    distribution("cold", cold_samples);
+    distribution("warm", warm_samples);
     return 0;
 }
