@@ -1,9 +1,12 @@
 #include "gpumemd/cuda_backend.hpp"
 #include "gpumemd/cuda_ipc_client.hpp"
 
+#include <cuda_runtime_api.h>
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 #include <sys/wait.h>
 #include <unistd.h>
@@ -16,7 +19,12 @@ int main(int argc, char* argv[]) {
         if (!opened.ok()) {
             return 1;
         }
-        return client.close(pointer).ok() ? 0 : 1;
+        std::vector<std::byte> received(4096);
+        const bool copied = cudaMemcpy(received.data(), pointer, received.size(),
+                                       cudaMemcpyDeviceToHost) == cudaSuccess;
+        const bool valid = copied && std::all_of(received.begin(), received.end(),
+            [](std::byte value) { return value == std::byte{0x5a}; });
+        return client.close(pointer).ok() && valid ? 0 : 1;
     }
 
     if (!gpumemd::CUDABackend::is_available()) {
@@ -24,7 +32,8 @@ int main(int argc, char* argv[]) {
     }
 
     gpumemd::CUDABackend backend;
-    assert(backend.load("shared", 4096).ok());
+    const std::vector<std::byte> payload(4096, std::byte{0x5a});
+    assert(backend.load("shared", payload).ok());
     const auto shared = backend.share("shared");
     assert(shared.ok());
 

@@ -124,6 +124,21 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    # Host-side concurrency tests use the real backend with a gated CUDA stub.
+    # They validate publication/cleanup, not GPU execution or transfer speed.
+    add_executable(cuda_backend_contract_test tests/cuda_backend_contract_test.cpp)
+    target_include_directories(cuda_backend_contract_test PRIVATE include tests/cuda_stub)
+    target_compile_features(cuda_backend_contract_test PRIVATE cxx_std_20)
+    target_link_libraries(cuda_backend_contract_test PRIVATE Threads::Threads)
+    add_test(NAME cuda_backend_contract COMMAND cuda_backend_contract_test)
+    set_tests_properties(cuda_backend_contract PROPERTIES TIMEOUT 10)
+
+    add_executable(cuda_load_contract_test tests/cuda_load_contract_test.cpp)
+    target_include_directories(cuda_load_contract_test PRIVATE tests/cuda_stub)
+    target_compile_features(cuda_load_contract_test PRIVATE cxx_std_20)
+    add_test(NAME cuda_load_contract COMMAND cuda_load_contract_test)
+    set_tests_properties(cuda_load_contract PROPERTIES TIMEOUT 10)
+
     add_executable(resource_manager_test tests/resource_manager_test.cpp)
     target_link_libraries(resource_manager_test PRIVATE gpumemd_core)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
@@ -258,6 +273,10 @@ if(BUILD_TESTING)
         add_test(NAME acquire_release
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_acquire_release.py"
                 --build $<TARGET_FILE_DIR:gpumemd>)
+        add_test(NAME server_churn
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/server_churn_test.py"
+                $<TARGET_FILE:gpumemd>)
+        set_tests_properties(server_churn PROPERTIES TIMEOUT 60)
         set_tests_properties(benchmark_unload acquire_release PROPERTIES TIMEOUT 30)
     endif()
 
@@ -280,6 +299,10 @@ if(BUILD_TESTING)
 endif()
 
 if(CMAKE_CUDA_COMPILER)
+    add_executable(gpumemd-cuda-load-bench src/benchmark/cuda_load.cu)
+    set_target_properties(gpumemd-cuda-load-bench PROPERTIES CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED YES)
+    target_link_libraries(gpumemd-cuda-load-bench PRIVATE CUDA::cudart)
+
     add_executable(gpumemd-cuda-bench-worker src/benchmark/cuda_worker.cu)
     set_target_properties(gpumemd-cuda-bench-worker PROPERTIES CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED YES)
     target_link_libraries(gpumemd-cuda-bench-worker PRIVATE gpumemd_cuda)

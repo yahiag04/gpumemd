@@ -56,6 +56,16 @@ bool CUDABackend::is_available() noexcept {
 }
 
 BackendOperationResult CUDABackend::load(std::string_view id, Bytes bytes) {
+    return load_impl(id, bytes, nullptr);
+}
+
+BackendOperationResult CUDABackend::load(std::string_view id,
+                                         std::span<const std::byte> data) {
+    return load_impl(id, static_cast<Bytes>(data.size()), data.data());
+}
+
+BackendOperationResult CUDABackend::load_impl(std::string_view id, Bytes bytes,
+                                             const void* data) {
     if (!valid_id(id)) {
         return {BackendError::InvalidModelId, 0};
     }
@@ -66,51 +76,51 @@ BackendOperationResult CUDABackend::load(std::string_view id, Bytes bytes) {
         return {BackendError::AllocationFailed, 0};
     }
 
-    std::lock_guard lock(impl_->mutex);
     const std::string key(id);
-    if (impl_->allocations.contains(key)) {
-        return {BackendError::AlreadyLoaded, 0};
+    {
+        std::lock_guard lock(impl_->mutex);
+        // A null pointer reserves the id but is invisible to readers until ready.
+        if (!impl_->allocations.emplace(key, Impl::Allocation{nullptr, bytes}).second) {
+            return {BackendError::AlreadyLoaded, 0};
+        }
     }
 
+    void* pointer = nullptr;
+    const auto fail = [&](BackendError error) {
+        if (pointer != nullptr) (void)cudaFree(pointer);
+        std::lock_guard lock(impl_->mutex);
+        impl_->allocations.erase(key);
+        return BackendOperationResult{error, 0};
+    };
     std::size_t free_bytes = 0;
     std::size_t total_bytes = 0;
     const auto info_result = cudaMemGetInfo(&free_bytes, &total_bytes);
     (void)total_bytes;
     if (info_result != cudaSuccess) {
-        return {BackendError::RuntimeFailure, 0};
+        return fail(BackendError::RuntimeFailure);
     }
     if (bytes > free_bytes) {
-        return {BackendError::AllocationFailed, 0};
+        return fail(BackendError::AllocationFailed);
     }
 
-    void* pointer = nullptr;
     const auto allocation_result = cudaMalloc(&pointer, static_cast<std::size_t>(bytes));
     if (allocation_result != cudaSuccess) {
-        return {BackendError::AllocationFailed, 0};
+        return fail(BackendError::AllocationFailed);
     }
-    impl_->allocations.emplace(key, Impl::Allocation{pointer, bytes});
+    // Allocate and initialize privately: share/unload cannot observe a partial
+    // upload, and the registry mutex is not held across the device transfer.
+    if (data != nullptr) {
+        if (cudaMemcpy(pointer, data, static_cast<std::size_t>(bytes),
+                       cudaMemcpyHostToDevice) != cudaSuccess ||
+            cudaStreamSynchronize(nullptr) != cudaSuccess) {
+            return fail(BackendError::RuntimeFailure);
+        }
+    }
+    {
+        std::lock_guard lock(impl_->mutex);
+        impl_->allocations.at(key).pointer = pointer;
+    }
     return {BackendError::None, bytes};
-}
-
-BackendOperationResult CUDABackend::load(std::string_view id,
-                                         std::span<const std::byte> data) {
-    const auto result = load(id, static_cast<Bytes>(data.size()));
-    if (!result.ok()) {
-        return result;
-    }
-    std::lock_guard lock(impl_->mutex);
-    const auto iterator = impl_->allocations.find(std::string(id));
-    if (iterator == impl_->allocations.end()) {
-        return {BackendError::RuntimeFailure, 0};
-    }
-    const auto copy_result = cudaMemcpy(iterator->second.pointer, data.data(), data.size(),
-                                         cudaMemcpyHostToDevice);
-    if (copy_result != cudaSuccess) {
-        (void)cudaFree(iterator->second.pointer);
-        impl_->allocations.erase(iterator);
-        return {BackendError::RuntimeFailure, 0};
-    }
-    return result;
 }
 
 BackendOperationResult CUDABackend::unload(std::string_view id) {
@@ -120,7 +130,7 @@ BackendOperationResult CUDABackend::unload(std::string_view id) {
 
     std::lock_guard lock(impl_->mutex);
     const auto iterator = impl_->allocations.find(std::string(id));
-    if (iterator == impl_->allocations.end()) {
+    if (iterator == impl_->allocations.end() || iterator->second.pointer == nullptr) {
         return {BackendError::NotLoaded, 0};
     }
     const auto result = cudaFree(iterator->second.pointer);
@@ -135,7 +145,7 @@ BackendOperationResult CUDABackend::unload(std::string_view id) {
 BackendShareResult CUDABackend::share(std::string_view id) {
     std::lock_guard lock(impl_->mutex);
     const auto iterator = impl_->allocations.find(std::string(id));
-    if (iterator == impl_->allocations.end()) {
+    if (iterator == impl_->allocations.end() || iterator->second.pointer == nullptr) {
         return {BackendError::NotLoaded, 0, {}};
     }
 
@@ -156,7 +166,8 @@ BackendShareResult CUDABackend::share(std::string_view id) {
 
 bool CUDABackend::is_loaded(std::string_view id) const {
     std::lock_guard lock(impl_->mutex);
-    return impl_->allocations.contains(std::string(id));
+    const auto iterator = impl_->allocations.find(std::string(id));
+    return iterator != impl_->allocations.end() && iterator->second.pointer != nullptr;
 }
 
 BackendSnapshot CUDABackend::snapshot() const {
@@ -164,7 +175,9 @@ BackendSnapshot CUDABackend::snapshot() const {
     BackendSnapshot snapshot;
     snapshot.allocations.reserve(impl_->allocations.size());
     for (const auto& [id, allocation] : impl_->allocations) {
-        snapshot.allocations.push_back({id, allocation.bytes});
+        if (allocation.pointer != nullptr) {
+            snapshot.allocations.push_back({id, allocation.bytes});
+        }
     }
     std::sort(snapshot.allocations.begin(), snapshot.allocations.end(),
               [](const BackendAllocation& left, const BackendAllocation& right) {

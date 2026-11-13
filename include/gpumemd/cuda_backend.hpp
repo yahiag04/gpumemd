@@ -25,6 +25,7 @@ public:
     [[nodiscard]] BackendSnapshot snapshot() const override;
 
 private:
+    BackendOperationResult load_impl(std::string_view id, Bytes bytes, const void* data);
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

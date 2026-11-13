@@ -2,11 +2,13 @@
 
 #include "gpumemd/protocol.hpp"
 
+#include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstddef>
 #include <cstring>
+#include <future>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -268,8 +270,16 @@ int UnixSocketServer::run(const std::function<bool()>& external_stop) {
         return -1;
     }
 
-    std::vector<std::thread> workers;
+    std::vector<std::future<void>> workers;
+    // one thread per active connection; completed sessions are reaped.
+    // An event loop with nonblocking acquires is needed to bound live concurrency.
+    const auto reap_completed = [&] {
+        std::erase_if(workers, [](auto& worker) {
+            return worker.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+        });
+    };
     while (!stop_requested_.load(std::memory_order_relaxed)) {
+        reap_completed();
         if (external_stop && external_stop()) {
             request_shutdown();
             break;
@@ -290,12 +300,31 @@ int UnixSocketServer::run(const std::function<bool()>& external_stop) {
         // Drain all pending clients. The non-blocking accept also handles
         // environments where poll does not reliably wake for AF_UNIX connects.
         while (!stop_requested_.load(std::memory_order_relaxed)) {
+            reap_completed();
             const int client_fd = accept(listen_fd_, nullptr, nullptr);
             if (client_fd >= 0) {
-                workers.emplace_back(client_session, client_fd, std::ref(manager_),
-                                     std::ref(registry_), std::ref(residency_),
-                                     metrics_, nodes_,
-                                     std::cref(stop_requested_));
+                // Allocate the tracking slot before starting a session. Destroying
+                // its last future joins the thread; completed sessions are reaped
+                // during normal operation, not retained until daemon shutdown.
+                try {
+                    workers.emplace_back();
+                } catch (...) {
+                    close(client_fd);
+                    continue;
+                }
+                try {
+                    workers.back() = std::async(std::launch::async, [this, client_fd] {
+                        try {
+                            client_session(client_fd, manager_, registry_, residency_,
+                                           metrics_, nodes_, stop_requested_);
+                        } catch (...) {
+                            close(client_fd);
+                        }
+                    });
+                } catch (...) {
+                    workers.pop_back();
+                    close(client_fd);
+                }
                 continue;
             }
             if (errno == EINTR) {
@@ -308,11 +337,12 @@ int UnixSocketServer::run(const std::function<bool()>& external_stop) {
         }
     }
 
+    request_shutdown();
     close(listen_fd_);
     listen_fd_ = -1;
     manager_.cancel_waiters();
     for (auto& worker : workers) {
-        worker.join();
+        worker.wait();
     }
     unlink(socket_path_.c_str());
     return 0;

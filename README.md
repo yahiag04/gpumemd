@@ -81,7 +81,7 @@ ctest --test-dir build --output-on-failure
 
 Requirements: **CMake 3.20+ and a C++20 compiler**. CUDA additionally requires
 `nvcc` and a compatible toolkit/driver. Python 3 enables the benchmark scripts
-and two additional CTest checks. The release contains sources, not prebuilt binaries.
+and additional CTest checks. The release contains sources, not prebuilt binaries.
 
 | Backend | Requirements | Residency | Cross-process sharing |
 | --- | --- | --- | --- |
@@ -158,7 +158,8 @@ CUDA IPC, server, and client tests. A separate acquire/release run in the same
 runtime verified capacity accounting, duplicate/oversized rejection, waiting,
 timeout, balanced byte counters, and zero final reservations.
 
-The current suite adds two Python checks and passes **19/19 locally on macOS**.
+The current suite also covers connection churn and CUDA host-side contracts
+with a stub runtime; these checks do not substitute for NVIDIA execution.
 The updated notebook combines previously separate checks; that combined sequence
 has not itself been rerun end to end on T4. See the
 [validation provenance](docs/benchmarks/2026-11-13-colab-t4/README.md#evidence-and-provenance).
@@ -169,6 +170,15 @@ Run the standalone logical accounting check with:
 python3 scripts/check_acquire_release.py --build build
 ```
 
+### Changes after v0.18.1
+
+`main` fixes retention of completed server threads and premature publication of
+CUDA backend uploads. It also includes an experimental pageable/pinned loading
+comparison. These changes have local regression coverage; fresh NVIDIA
+validation and performance measurements are pending. The published v0.18.1
+release and historical T4 measurements predate these fixes. See the
+[fixes, test evidence, and A/B procedure](docs/LOAD_EXPERIMENT.md).
+
 ## Documentation and source
 
 | Resource | Contents |
@@ -177,6 +187,7 @@ python3 scripts/check_acquire_release.py --build build
 | [C++ integration](docs/CPP_INTEGRATION.md) | Linking, device pointers, retention and cleanup |
 | [Command and benchmark reference](docs/REFERENCE.md) | Protocol semantics, scheduling, benchmark commands |
 | [T4 report](docs/benchmarks/2026-11-13-colab-t4/README.md) | Raw evidence, measurements, methodology and limits |
+| [Loading experiment](docs/LOAD_EXPERIMENT.md) | Post-release concurrency fixes and pageable/pinned A/B procedure |
 | [Release notes](docs/releases/v0.18.1.md) | Packaged features and experimental release scope |
 
 Public APIs live in `include/gpumemd/`; implementations are under `src/core/`,
