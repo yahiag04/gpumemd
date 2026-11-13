@@ -1,354 +1,190 @@
 # gpumemd
 
-A C++20 GPU resource and model-residency broker with optional NVIDIA CUDA
-and Apple Metal backends, plus a mock backend for hardware-independent use.
-It manages allocations and raw model-file residency; it does not run inference.
+**Share one GPU-resident copy of your data across multiple processes.**
 
-**Current state: v0.18.1 experimental release, validated on NVIDIA T4 with CUDA IPC and multiprocess memory benchmarks.** CMake builds the daemon, the independent
-`ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
-text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
-priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
-CLI behavior, and Unix socket integration.
+gpumemd is a C++20 memory broker with a local daemon, CLI, and C++ client.
+It manages raw model-file residency and lets NVIDIA GPU workers import the
+same allocation through CUDA IPC.
 
-v0.9 supports optional NVIDIA CUDA allocations when CMake finds a CUDA compiler
-and toolkit. macOS continues to use Metal, and systems without a usable
-accelerator continue to use the mock backend. It does not parse model formats
-or run model kernels.
-Model footprints and residency consume logical reservations in the daemon's
-configured capacity so residency policy can be exercised without hardware.
-The accelerator boundary is represented by `AcceleratorBackend`; `MockBackend`
-tracks simulated model loads and unloads, while `MetalBackend` allocates one
-shared `MTLBuffer` per resident model and `CUDABackend` allocates one CUDA
-device buffer per resident model.
-The v0.10 `MemoryAllocator` provides pool allocation with block reuse and
-coalescing, while keeping direct accounting available for simpler callers.
-The v0.11 scheduler preserves priority/FIFO behavior by default and adds an
-optional cost-aware policy. Use `--scheduling cost` and pass an estimated load
-cost as the sixth field of `acquire NAME SIZE PRIORITY TIMEOUT COST_MS`.
-The v0.12 `DevicePlacement` service selects the least-used device with enough
-capacity and tracks model-to-device assignments without changing the existing
-single-device backend behavior.
-The v0.13 daemon exposes thread-safe request counters through the `metrics`
-command without requiring an external metrics dependency.
-The v0.14 residency manager records load history and measured load cost, then
-uses those signals together with recency and footprint when selecting
-unreferenced models for eviction.
-The v0.15 daemon includes a thread-safe remote-node registry exposed through
-`node_register`, `node_remove`, and `nodes`; it tracks endpoint, capacity,
-usage, and health while leaving transport/replication to a later extension.
-The v0.16 `gpumemd_client` library provides a C++ API for applications to issue
-resource and residency requests over the Unix socket without reimplementing
-the wire protocol.
-The v0.17 CUDA client wrapper combines the `share` request with
-`cudaIpcOpenMemHandle` and closes the imported allocation automatically through
-RAII when the wrapper is destroyed.
-The v0.18 CUDA demo performs an end-to-end IPC check by importing a resident
-allocation and executing `cudaMemset` from a separate process.
+**Validated on NVIDIA T4:** eight workers shared a single 512 MiB allocation,
+using **87.5% less incremental VRAM** than eight independent copies across
+three trials.
 
-## Try it / use it
+[Quickstart](docs/QUICKSTART.md) ·
+[Try on Colab](https://colab.research.google.com/github/yahiag04/gpumemd/blob/v0.18.1/notebooks/gpumemd_t4.ipynb) ·
+[C++ integration](docs/CPP_INTEGRATION.md) ·
+[Benchmark report](docs/benchmarks/2026-11-13-colab-t4/README.md) ·
+[Download v0.18.1](https://github.com/yahiag04/gpumemd/releases/tag/v0.18.1)
 
-**Experimental source release:** [v0.18.1](https://github.com/yahiag04/gpumemd/releases/tag/v0.18.1).
-Start with the [Linux/CUDA quickstart](docs/QUICKSTART.md), or
-[open the T4 notebook in Colab](https://colab.research.google.com/github/yahiag04/gpumemd/blob/v0.18.1/notebooks/gpumemd_t4.ipynb).
-Upload the release's `gpumemd-colab-source.zip` asset when the notebook requests sources.
+**Experimental · MIT licensed · Source distribution.**
+The broker manages memory; it does not parse model formats or run inference.
 
-For application developers, the [C++ integration guide](docs/CPP_INTEGRATION.md)
-explains linking, imported pointer lifetime, and coordinator-side retention.
-The release provides source code, not prebuilt binaries. Use trusted local
-clients; API stability and production fault recovery are not guaranteed.
+## Why use it?
 
-## Implementation and validation status
+Multiple GPU worker processes may need the same large dataset or model weights.
+Keeping a separate copy in every process consumes VRAM that could otherwise
+hold inputs, outputs, or additional data.
 
-- Implemented: Unix socket daemon and CLI, C++ client API, resource accounting,
-  priority/FIFO and cost-aware scheduling, model registration and residency,
-  reference-count protection, and eviction informed by recency, load cost,
-  load history, and footprint.
-- Backends: mock accounting, Metal shared-buffer allocation, and optional CUDA
-  device allocation, raw-file transfer, and cross-process CUDA IPC import/export.
-  Metal cross-process sharing is not implemented.
-- Supporting components: pool allocator, device-placement accounting, request
-  counters, and remote-node registry. Device placement is not multi-GPU routing;
-  the node registry does not provide distributed transport or replication.
-- Locally verified: Release build and Metal cold/resident-load benchmarks on
-  Apple M4, plus socket latency measurements over 10,000 requests.
-- NVIDIA validated: Google Colab Tesla T4, CUDA 13.0, Release build, 18/18
-  CTest checks passed. Eight workers shared one 512 MiB allocation instead of
-  eight independent copies: 87.5% less incremental VRAM in three trials.
-  Separate acquire/release validation passed in the same T4 runtime.
-  See the [results and raw logs](docs/benchmarks/2026-11-13-colab-t4/README.md).
-- Not implemented: model-format parsing, inference kernels, multi-GPU routing,
-  authentication, or persistent/distributed service operation.
+With gpumemd, the daemon loads the raw bytes once and workers import that
+allocation. A coordinator keeps the data resident until all consumers finish.
+For example, custom CUDA workers could share a read-only vector database while
+each processes its own queries.
 
-## Build and test
+This is a building block for developers integrating their own CUDA workloads.
+Applications must use the client API; existing frameworks do not automatically
+start sharing memory when the daemon is launched.
 
-Requirements: CMake 3.20+ and a compiler supporting C++20, on macOS or Linux.
-Metal uses the macOS system framework; CUDA builds require the NVIDIA CUDA
-compiler and toolkit. The mock backend requires neither accelerator SDK.
+## Results on NVIDIA T4
+
+Measured in Google Colab with a **512 MiB synthetic file**, CUDA 13.0, a Release
+build, and three trials per worker count. All three trials produced the same
+memory deltas at each count.
+
+| Workers | Independent VRAM delta | Shared VRAM delta | Reduction |
+| ---: | ---: | ---: | ---: |
+| 1 | 512 MiB | 512 MiB | 0% |
+| 2 | 1,024 MiB | 512 MiB | 50% |
+| 4 | 2,048 MiB | 512 MiB | 75% |
+| 8 | 4,096 MiB | 512 MiB | **87.5%** |
+
+These deltas exclude the initialized CUDA-context baseline. At eight workers,
+**total observed GPU usage** fell from 5,017 to 1,433 MiB: a **71.4% reduction**.
+
+Socket round-trip latency over 10,000 requests:
+
+| p50 | p95 | p99 |
+| ---: | ---: | ---: |
+| 112 µs | 165 µs | 220 µs |
+
+Socket timings include connection setup and Python overhead. These measurements
+show memory sharing and broker latency, not inference throughput. See the
+[full report and raw logs](docs/benchmarks/2026-11-13-colab-t4/README.md)
+for loading times, methodology, environment, and limitations.
+
+## Get started
+
+### On your machine
+
+For CUDA sharing, follow the [Linux/NVIDIA quickstart](docs/QUICKSTART.md).
+It covers compilation, a two-process IPC demo, concurrent memory measurements,
+and cleanup.
+
+For a general local build on Linux or macOS:
 
 ```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build --parallel
+git clone --branch v0.18.1 --depth 1 https://github.com/yahiag04/gpumemd.git
+cd gpumemd
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel 2
 ctest --test-dir build --output-on-failure
 ```
 
-Tests are enabled by default; configure with `-DBUILD_TESTING=OFF` to disable
-them. The suite covers thread-safe accounting, boundary and invalid operations,
-command parsing and size units, help, option validation, multi-client operation,
-and clean socket shutdown.
+Requirements: **CMake 3.20+ and a C++20 compiler**. CUDA additionally requires
+`nvcc` and a compatible toolkit/driver. Python 3 enables the benchmark scripts
+and two additional CTest checks. The release contains sources, not prebuilt binaries.
 
-## Run the broker
+| Backend | Requirements | Residency | Cross-process sharing |
+| --- | --- | --- | --- |
+| CUDA | Linux, NVIDIA GPU and CUDA toolkit | Device allocations and raw-file transfer | CUDA IPC |
+| Metal | macOS and system Metal framework | Shared-buffer allocations and raw-file transfer | Not implemented |
+| Mock | Linux or macOS; no GPU SDK required | Simulated | Not supported |
 
-```sh
-./build/gpumemd --memory 16GB --socket /tmp/gpumemd.sock
-```
+CUDA builds are enabled when CMake finds the compiler and toolkit. A daemon
+without a usable accelerator can fall back to mock; a successful mock run does
+not validate GPU sharing.
 
-The daemon owns the socket path and removes it on orderly shutdown. Press
-Ctrl-C to stop it. Existing socket paths are refused rather than overwritten.
+### Google Colab / T4
 
-In another terminal, use the client:
+1. [Open the notebook](https://colab.research.google.com/github/yahiag04/gpumemd/blob/v0.18.1/notebooks/gpumemd_t4.ipynb) and select a T4 GPU runtime.
+2. Download `gpumemd-colab-source.zip` from the [release](https://github.com/yahiag04/gpumemd/releases/tag/v0.18.1).
+3. Run the cells in order and upload that ZIP when requested.
+4. Download the results ZIP before disconnecting.
 
-```sh
-./build/gpumemctl --socket /tmp/gpumemd.sock acquire processA 4GB
-./build/gpumemctl --socket /tmp/gpumemd.sock try_acquire processB 2GB
-./build/gpumemctl --socket /tmp/gpumemd.sock acquire processC 8GB 10 5000
-./build/gpumemctl --socket /tmp/gpumemd.sock status
-./build/gpumemctl --socket /tmp/gpumemd.sock release processA
-./build/gpumemctl --socket /tmp/gpumemd.sock release processB
-./build/gpumemctl --socket /tmp/gpumemd.sock release processC
-./build/gpumemctl --socket /tmp/gpumemd.sock register bert 7GB bert-base
-./build/gpumemctl --socket /tmp/gpumemd.sock register_file bert /models/bert.bin bert-base
-./build/gpumemctl --socket /tmp/gpumemd.sock load bert
-./build/gpumemctl --socket /tmp/gpumemd.sock retain bert
-./build/gpumemctl --socket /tmp/gpumemd.sock residency
-./build/gpumemctl --socket /tmp/gpumemd.sock models
-./build/gpumemctl --socket /tmp/gpumemd.sock release_model bert
-./build/gpumemctl --socket /tmp/gpumemd.sock unload bert
-./build/gpumemctl --socket /tmp/gpumemd.sock unregister bert
-```
+The notebook builds the project, runs tests and the IPC demo, measures
+cold/resident loads, socket latency, and independent/shared VRAM, then checks
+logical acquire/release behavior. Use the named release asset: its files are
+at the archive root, unlike GitHub's automatically generated source ZIP.
 
-Applications can use the C++ client library instead of invoking the CLI:
-
-```cpp
-#include "gpumemd/client.hpp"
-
-gpumemd::Client client("/tmp/gpumemd.sock");
-auto acquired = client.acquire("worker", 4ULL * 1000 * 1000 * 1000);
-if (!acquired.ok()) {
-    // acquired.payload contains the broker error when available.
-}
-client.release("worker");
-```
-
-On a CUDA build, a process can import a resident model allocation with:
-
-```cpp
-#include "gpumemd/cuda_client.hpp"
-
-gpumemd::CudaClient client("/tmp/gpumemd.sock");
-auto shared = client.open_model("bert");
-if (shared.ok()) {
-    void* device_pointer = shared.allocation->pointer();
-    // Use device_pointer from CUDA code while the allocation remains alive.
-}
-```
-
-On a CUDA machine, the complete demo is:
-
-```sh
-./build/gpumemd --memory 1GB --socket /tmp/gpumemd.sock &
-./build/gpumemctl --socket /tmp/gpumemd.sock register bert 64MB demo
-./build/gpumemctl --socket /tmp/gpumemd.sock load bert
-./build/gpumemd-cuda-demo --socket /tmp/gpumemd.sock --model bert
-```
-
-Expected output includes `OK opened`, `OK cudaMemset`, and
-`OK closed_on_scope_exit`.
-
-`gpumemctl` returns a non-zero status for broker or command errors.
-`acquire` waits for memory when needed; its optional values are priority and
-timeout in milliseconds. `try_acquire` never waits. An `acquire` larger than
-the daemon's total capacity is impossible and returns `insufficient_memory`
-immediately, even when its timeout would otherwise wait forever. A timeout of
-`0` is also an immediate, non-blocking attempt.
-
-## Model registry and residency
-
-`register NAME SIZE METADATA` creates a model record with reference count and
-last-access sequence set to zero. `retain NAME` increments its reference count,
-and `release_model NAME` decrements a positive count; reaching zero leaves the
-record registered. `unregister NAME` removes only a zero-reference record and
-returns `model_in_use` otherwise. `models` lists records sorted by name with
-their metadata, declared footprint in bytes, reference count, and monotonic
-last-access sequence.
-
-`register_file NAME PATH METADATA` registers a raw binary model file. Its
-footprint is read from the file size, and `load NAME` reads the file and copies
-its bytes into the selected accelerator backend. Paths and metadata are single
-tokens; quoting and whitespace in paths are not supported by the text protocol.
-`models` includes the source path for file-backed records.
-
-`share NAME` exports a resident CUDA allocation as a hexadecimal CUDA IPC token:
-
-```sh
-./build/gpumemctl --socket /tmp/gpumemd.sock share bert
-```
-
-The token is valid only while the daemon keeps the model resident. It can be
-opened from another CUDA process through `CudaIpcClient`, then closed in that
-process. Mock and Metal backends report `unsupported`; CUDA IPC currently uses
-device 0 and does not provide persistence, authentication, networking, or
-multi-GPU routing.
-
-`load NAME` explicitly makes a registered model resident and reserves its
-declared footprint under `model:NAME`; `unload NAME` explicitly releases that
-reservation. Loading an already resident model is idempotent. `residency`
-lists resident models with footprint, reference count, and monotonic load
-order. Registration and retention alone do not make a model resident.
-
-When a load needs capacity, the broker ranks resident models using recency,
-measured load cost, load history, and footprint, and evicts only models whose
-reference count is zero. A model
-protected by `retain` cannot be evicted or explicitly unloaded until matching
-`release_model` calls return its reference count to zero. If enough capacity
-cannot be obtained, the load fails with `insufficient_memory` and preserves
-all existing residency and reservations; failed loads never partially evict
-models.
-
-Simulated registrations use logical footprints. File-backed registrations use
-the actual file size and transfer raw bytes, but no model format is parsed.
-Metadata is a single non-empty ASCII token of at most 128 bytes; quoting and
-whitespace are not supported.
-
-## Cold/warm benchmark
-
-Builds include `gpumemd-bench`, which measures file-backed cold loads and
-already-resident warm loads:
-
-```sh
-./build/gpumemd-bench --file /models/bert.bin --iterations 5 --backend auto
-```
-
-`auto` prefers CUDA, then Metal, then Mock. Use `--backend mock`, `metal`, or
-`cuda` to select one explicitly. Cold samples read and transfer the file after
-each unload; warm samples repeat the idempotent load while the model remains
-resident.
-
-## Structure and next steps
-
-- `include/gpumemd/`: public core types and the resource/registry APIs.
-- `src/core/`: hardware-independent resource, registry, and residency logic.
-- `include/gpumemd/accelerator_backend.hpp` and `src/backend/`: accelerator
-  backend contract, simulated `MockBackend`, and optional Metal implementation.
-- `include/gpumemd/protocol.hpp` and `src/protocol/`: text-command parser.
-- `src/daemon/`: daemon entry point and option handling.
-- `include/gpumemd/server.hpp` and `src/ipc/`: multi-client Unix socket server.
-- `src/client/`: `gpumemctl` command-line client.
-- `tests/`: CTest checks for core accounting, parsing, CLI behavior, and IPC.
-
-The v0.9 acceptance demonstration combines concurrent resource clients with
-three registered models, explicit loads, refcount protection, LRU eviction,
-and complete unload/release/unregister cleanup. Final `status` should report
-used `0` and all configured capacity free.
-
-Model-format parsing, model kernels, and multi-GPU support remain future work.
-CUDA builds select device 0 only and are enabled only when `nvcc` and the CUDA
-toolkit are available at configure time.
-
-## Performance experiments
-
-Build in Release mode. `gpumemd-bench` now reports nearest-rank p50/p95/p99
-in nanoseconds for cold loads and at least 10,000 resident load calls, after
-1,000 warm-up calls. These are in-process idempotent loads, not inference.
-Clock overhead is included; filesystem caches are not flushed.
-
-For socket round trips (including connection establishment and Python overhead),
-register a disposable model in a running daemon, then run:
-
-```sh
-python3 scripts/benchmark.py --socket /tmp/gpumemd.sock --model bench
-```
-
-On a dedicated idle NVIDIA GPU, build the CUDA targets, start the daemon and
-register a disposable file-backed model named `bench`. Use the same file for
-independent workers and the broker:
-
-```sh
-./build/gpumemctl --socket /tmp/gpumemd.sock register_file bench /absolute/model.bin benchmark
-python3 scripts/benchmark.py --socket /tmp/gpumemd.sock --model bench \
-  --cuda-worker ./build/gpumemd-cuda-bench-worker --file /absolute/model.bin --processes 4
-./build/gpumemd-bench --file /absolute/model.bin --backend cuda --iterations 20
-```
-
-The comparison unloads this model and runs independent then shared workers.
-All N CUDA contexts initialize before the baseline. Workers stay alive until
-the GPU-wide resident measurement; shared mode includes the daemon allocation.
-`nvidia-smi` samples GPU 0 memory in MiB, avoiding double counting IPC mappings.
-Run with CUDA device visibility matching physical GPU 0 and no other workloads.
-Repeat for N=1,2,4,8 and several trials; compare `delta_mib` and report
-`1 - shared_delta / independent_delta`. Expected payload alone is N*S versus S;
-actual deltas include allocation granularity and IPC overhead. Negative/noisy
-deltas or insufficient VRAM invalidate a trial. Do not sum per-process RSS.
-
-Worker timings separate file read/allocation/copy or broker share+IPC open,
-explicit device synchronization, and close/free. Shared workers never mutate
-model data. Synchronization measures an idle-device barrier after synchronous
-loading, not cross-process producer/consumer synchronization. CUDA experiments
-require NVIDIA hardware and are not validated by a successful Metal run.
-
-## Google Colab / T4
-
-Upload [`notebooks/gpumemd_t4.ipynb`](notebooks/gpumemd_t4.ipynb) to Colab,
-select a T4 GPU runtime, and run the cells in order. The notebook asks for
-`gpumemd-colab-source.zip`, an archive with this repository's source files at
-its root (not inside an extra directory). To package a committed revision:
+To package a different committed checkout for the notebook:
 
 ```sh
 git archive --format=zip --output=gpumemd-colab-source.zip HEAD
 ```
 
-The notebook builds Release with CUDA architecture 75, runs CTest and an IPC
-smoke test, then reuses the existing benchmarks: cold/resident load latency,
-10,000 socket calls, and independent/shared VRAM for 1/2/4/8 workers with three
-trials each. Defaults use a 512 MiB synthetic file. Download the results ZIP
-with raw logs and the memory comparison CSV before ending the runtime.
-These are memory-management measurements, not inference throughput. The
-[recorded T4 run](docs/benchmarks/2026-11-13-colab-t4/README.md) includes the
-Release assertion and benchmark unload corrections now included in this source.
-The acquire/release check was run separately in the same runtime; the notebook
-now includes that check before export.
+## How it works
 
-For explicit acquire/release validation against a separate daemon:
+The daemon owns resident allocations. Clients communicate through a Unix
+socket, and CUDA consumers import device pointers through the C++ wrapper.
+There are three separate operations:
+
+| Purpose | Commands / API | Effect |
+| --- | --- | --- |
+| Reserve logical capacity | `acquire`, `try_acquire`, `release` | Accounting and waiting; no CUDA allocation |
+| Manage resident data | `register_file`, `load`, `unload` | Register a raw file and move its bytes into/out of the backend |
+| Protect and share data | `retain`, `release_model`, `share` / `open_model()` | Prevent eviction and import a CUDA allocation |
+
+**Keep the allocation alive while consumers use it.** The coordinator must
+retain the model before loading and release it after every consumer finishes
+GPU work and closes its imported mapping. `open_model()` does not retain the
+model automatically; its RAII wrapper closes only the local IPC mapping.
+
+The [C++ integration guide](docs/CPP_INTEGRATION.md) provides a complete example,
+CMake linking instructions, and the ownership rules.
+
+## Features and scope
+
+- **Residency management:** file-backed loading, reference protection, and
+  eviction informed by recency, load cost, load history, and footprint.
+- **Resource scheduling:** logical capacity accounting, priority/FIFO queues,
+  optional cost-aware scheduling, non-blocking requests, and timeouts.
+- **Local clients:** Unix-socket daemon, command-line client, C++ client library,
+  and CUDA IPC mapping wrapper.
+- **Observability:** status, residency, registry, and request/byte counters.
+
+Supporting components include a pool allocator, device-placement accounting,
+and a remote-node registry. Placement is not multi-GPU routing, and the node
+registry does not implement distributed transport or replication.
+
+Use trusted processes on one host and one visible GPU. This experimental
+release has no authentication, automatic client-crash reference recovery,
+persistent service recovery, or stable API/ABI guarantee. Concurrent writes
+and GPU synchronization are the application's responsibility. Model-format
+parsing and inference execution are outside the project's scope.
+
+## Validation
+
+The recorded T4 run passed **18/18 CTest checks**, including CUDA backend,
+CUDA IPC, server, and client tests. A separate acquire/release run in the same
+runtime verified capacity accounting, duplicate/oversized rejection, waiting,
+timeout, balanced byte counters, and zero final reservations.
+
+The current suite adds two Python checks and passes **19/19 locally on macOS**.
+The updated notebook combines previously separate checks; that combined sequence
+has not itself been rerun end to end on T4. See the
+[validation provenance](docs/benchmarks/2026-11-13-colab-t4/README.md#evidence-and-provenance).
+
+Run the standalone logical accounting check with:
 
 ```sh
 python3 scripts/check_acquire_release.py --build build
 ```
 
-This checks logical accounting, duplicate/oversized requests, full-capacity
-`try_acquire`, timeout, a waiting client unblocked by release, balanced byte
-counters, and zero final reservations. A passing run reports seven acquire
-attempts (including four expected failures) and three releases. The Colab
-notebook saves this separately as `acquire-release.json`. These reservations
-do not allocate CUDA memory; T4 execution must be confirmed by the runtime's
-actual output, not inferred from the local check.
+## Documentation and source
 
-## Measured T4 results
+| Resource | Contents |
+| --- | --- |
+| [Quickstart](docs/QUICKSTART.md) | First CUDA run, demo, measurements, troubleshooting |
+| [C++ integration](docs/CPP_INTEGRATION.md) | Linking, device pointers, retention and cleanup |
+| [Command and benchmark reference](docs/REFERENCE.md) | Protocol semantics, scheduling, benchmark commands |
+| [T4 report](docs/benchmarks/2026-11-13-colab-t4/README.md) | Raw evidence, measurements, methodology and limits |
+| [Release notes](docs/releases/v0.18.1.md) | Packaged features and experimental release scope |
 
-512 MiB synthetic file, three trials per process count:
+Public APIs live in `include/gpumemd/`; implementations are under `src/core/`,
+`src/backend/`, `src/ipc/`, and `src/client/`. Tests are in `tests/`, and
+reproducible experiments are in `scripts/` and `notebooks/`.
 
-| Processes | Independent VRAM delta | Shared VRAM delta | Reduction |
-| ---: | ---: | ---: | ---: |
-| 1 | 512 MiB | 512 MiB | 0% |
-| 2 | 1,024 MiB | 512 MiB | 50% |
-| 4 | 2,048 MiB | 512 MiB | 75% |
-| 8 | 4,096 MiB | 512 MiB | 87.5% |
-
-Socket round-trip p50/p95/p99: **112/165/220 microseconds**, 10,000 samples.
-These deltas exclude the initialized-context baseline; at eight workers total
-observed GPU usage was 5,017 MiB independent versus 1,433 MiB shared (71.4% less).
-The project manages raw bytes and logical reservations; it does not execute
-inference. Crash recovery, security hardening, and long-running load validation
-remain outside the demonstrated prototype scope. See the
-[methodology, limitations, and evidence](docs/benchmarks/2026-11-13-colab-t4/README.md).
+For reproducible bugs, open a [GitHub issue](https://github.com/yahiag04/gpumemd/issues)
+with the revision, GPU, compiler/toolkit versions, command, and relevant output.
 
 ## License
 
