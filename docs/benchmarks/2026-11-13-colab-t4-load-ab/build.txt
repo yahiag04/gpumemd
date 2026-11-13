@@ -1,0 +1,91 @@
+[  3%] Building CXX object CMakeFiles/gpumemd_core.dir/src/backend/mock_backend.cpp.o
+[  3%] Building CXX object CMakeFiles/gpumemd_protocol.dir/src/protocol/protocol.cpp.o
+[  4%] Building CXX object CMakeFiles/gpumemd_core.dir/src/core/model_registry.cpp.o
+[  6%] Linking CXX static library libgpumemd_protocol.a
+[  6%] Built target gpumemd_protocol
+[  7%] Building CXX object CMakeFiles/cuda_backend_contract_test.dir/tests/cuda_backend_contract_test.cpp.o
+[  9%] Building CXX object CMakeFiles/gpumemd_core.dir/src/core/model_loader.cpp.o
+[ 10%] Building CXX object CMakeFiles/gpumemd_core.dir/src/core/memory_allocator.cpp.o
+[ 12%] Linking CXX executable cuda_backend_contract_test
+[ 12%] Built target cuda_backend_contract_test
+[ 14%] Building CXX object CMakeFiles/gpumemd_core.dir/src/core/device_placement.cpp.o
+[ 15%] Building CXX object CMakeFiles/gpumemd_core.dir/src/core/metrics.cpp.o
+[ 17%] Building CXX object CMakeFiles/cuda_load_contract_test.dir/tests/cuda_load_contract_test.cpp.o
+[ 18%] Building CXX object CMakeFiles/gpumemd_core.dir/src/core/node_registry.cpp.o
+[ 20%] Linking CXX executable cuda_load_contract_test
+[ 21%] Building CXX object CMakeFiles/gpumemd_core.dir/src/core/model_residency.cpp.o
+[ 21%] Built target cuda_load_contract_test
+[ 23%] Building CXX object CMakeFiles/gpumemd_core.dir/src/core/resource_manager.cpp.o
+[ 25%] Building CXX object CMakeFiles/protocol_test.dir/tests/protocol_test.cpp.o
+[ 26%] Linking CXX static library libgpumemd_core.a
+[ 26%] Built target gpumemd_core
+[ 28%] Building CXX object CMakeFiles/cli_framing_test.dir/tests/cli_framing_test.cpp.o
+[ 29%] Linking CXX executable cli_framing_test
+[ 29%] Built target cli_framing_test
+[ 31%] Building CUDA object CMakeFiles/gpumemd-cuda-load-bench.dir/src/benchmark/cuda_load.cu.o
+[ 32%] Linking CXX executable protocol_test
+[ 32%] Built target protocol_test
+[ 34%] Building CXX object CMakeFiles/gpumemd_client.dir/src/client/client.cpp.o
+[ 35%] Linking CXX static library libgpumemd_client.a
+[ 35%] Built target gpumemd_client
+[ 37%] Building CXX object CMakeFiles/gpumemd_server.dir/src/ipc/unix_socket_server.cpp.o
+[ 39%] Linking CUDA executable gpumemd-cuda-load-bench
+[ 39%] Built target gpumemd-cuda-load-bench
+[ 40%] Building CXX object CMakeFiles/gpumemctl.dir/src/client/main.cpp.o
+[ 42%] Linking CXX static library libgpumemd_server.a
+[ 42%] Built target gpumemd_server
+[ 43%] Building CXX object CMakeFiles/resource_manager_test.dir/tests/resource_manager_test.cpp.o
+[ 45%] Linking CXX executable gpumemctl
+[ 45%] Built target gpumemctl
+[ 46%] Building CXX object CMakeFiles/model_registry_test.dir/tests/model_registry_test.cpp.o
+[ 48%] Linking CXX executable model_registry_test
+[ 48%] Built target model_registry_test
+[ 50%] Building CXX object CMakeFiles/model_residency_test.dir/tests/model_residency_test.cpp.o
+[ 51%] Linking CXX executable resource_manager_test
+[ 51%] Built target resource_manager_test
+[ 53%] Building CXX object CMakeFiles/mock_backend_test.dir/tests/mock_backend_test.cpp.o
+[ 54%] Linking CXX executable mock_backend_test
+[ 54%] Built target mock_backend_test
+[ 56%] Building CXX object CMakeFiles/model_file_test.dir/tests/model_file_test.cpp.o
+[ 57%] Linking CXX executable model_residency_test
+[ 57%] Built target model_residency_test
+[ 59%] Building CXX object CMakeFiles/memory_allocator_test.dir/tests/memory_allocator_test.cpp.o
+[ 60%] Linking CXX executable memory_allocator_test
+[ 60%] Built target memory_allocator_test
+[ 62%] Building CXX object CMakeFiles/device_placement_test.dir/tests/device_placement_test.cpp.o
+[ 64%] Linking CXX executable device_placement_test
+[ 64%] Built target device_placement_test
+[ 65%] Building CXX object CMakeFiles/node_registry_test.dir/tests/node_registry_test.cpp.o
+[ 67%] Linking CXX executable model_file_test
+[ 67%] Built target model_file_test
+[ 68%] Building CXX object CMakeFiles/client_test.dir/tests/client_test.cpp.o
+[ 70%] Linking CXX executable node_registry_test
+[ 70%] Built target node_registry_test
+[ 71%] Building CXX object CMakeFiles/server_test.dir/tests/server_test.cpp.o
+[ 73%] Linking CXX executable client_test
+[ 73%] Built target client_test
+[ 75%] Building CUDA object CMakeFiles/gpumemd_cuda.dir/src/backend/cuda_backend.cu.o
+[ 76%] Linking CXX executable server_test
+[ 76%] Built target server_test
+[ 78%] Building CUDA object CMakeFiles/gpumemd_cuda.dir/src/backend/cuda_ipc_client.cu.o
+[ 79%] Building CUDA object CMakeFiles/gpumemd_cuda.dir/src/backend/cuda_client.cu.o
+[ 81%] Linking CXX static library libgpumemd_cuda.a
+[ 81%] Built target gpumemd_cuda
+[ 82%] Building CXX object CMakeFiles/gpumemd.dir/src/daemon/main.cpp.o
+[ 84%] Building CUDA object CMakeFiles/gpumemd-cuda-demo.dir/src/examples/cuda_ipc_demo.cu.o
+[ 85%] Linking CXX executable gpumemd
+[ 85%] Built target gpumemd
+[ 87%] Building CXX object CMakeFiles/gpumemd-bench.dir/src/benchmark/main.cpp.o
+[ 89%] Linking CXX executable gpumemd-bench
+[ 89%] Built target gpumemd-bench
+[ 90%] Building CXX object CMakeFiles/cuda_backend_test.dir/tests/cuda_backend_test.cpp.o
+[ 92%] Linking CXX executable cuda_backend_test
+[ 92%] Built target cuda_backend_test
+[ 93%] Building CUDA object CMakeFiles/cuda_ipc_test.dir/tests/cuda_ipc_test.cu.o
+[ 95%] Linking CXX executable gpumemd-cuda-demo
+[ 95%] Built target gpumemd-cuda-demo
+[ 96%] Building CUDA object CMakeFiles/gpumemd-cuda-bench-worker.dir/src/benchmark/cuda_worker.cu.o
+[ 98%] Linking CXX executable cuda_ipc_test
+[ 98%] Built target cuda_ipc_test
+[100%] Linking CXX executable gpumemd-cuda-bench-worker
+[100%] Built target gpumemd-cuda-bench-worker

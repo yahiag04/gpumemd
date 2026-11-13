@@ -1,0 +1,12 @@
+backend cuda
+bytes 536870912
+iterations 20
+cold_avg_ms 571.854
+warm_avg_ms 0.000
+warm_samples 10000
+cold_p50_ns 537094286.000
+cold_p95_ns 662925149.000
+cold_p99_ns 741800170.000
+warm_p50_ns 143.000
+warm_p95_ns 147.000
+warm_p99_ns 238.000

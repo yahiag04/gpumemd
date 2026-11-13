@@ -1,0 +1,15 @@
+{
+  "pageable": {
+    "total_ms": 538.266,
+    "host_setup_ms": 288.833,
+    "file_read_ms": 129.184,
+    "h2d_gpu_ms": 118.982
+  },
+  "pinned_pipeline": {
+    "total_ms": 108.23,
+    "host_setup_ms": 8.5174,
+    "file_read_ms": 93.6324,
+    "h2d_gpu_ms": 47.3983
+  },
+  "speedup_total_medians": 4.973353044442391
+}

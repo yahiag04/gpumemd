@@ -1,0 +1,13 @@
+processes,trial,independent_mib,shared_mib,positive_deltas,savings_percent
+1,1,512,512,True,0.0
+1,2,512,512,True,0.0
+1,3,512,512,True,0.0
+2,1,1024,512,True,50.0
+2,2,1024,512,True,50.0
+2,3,1024,512,True,50.0
+4,1,2048,512,True,75.0
+4,2,2048,512,True,75.0
+4,3,2048,512,True,75.0
+8,1,4096,512,True,87.5
+8,2,4096,512,True,87.5
+8,3,4096,512,True,87.5

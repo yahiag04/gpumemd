@@ -1,0 +1,10 @@
+{"mode": "independent", "processes": 4, "baseline_mib": 513, "resident_mib": 2561, "delta_mib": 2048, "broker_load_us": null, "workers": ["load_or_share_open_us 1.68088e+06 sync_us 24.674", "load_or_share_open_us 1.67713e+06 sync_us 31.069", "load_or_share_open_us 1.51366e+06 sync_us 33.593", "load_or_share_open_us 1.6497e+06 sync_us 30.174"]}
+close_us 441.746
+close_us 662.403
+close_us 794.408
+close_us 707.776
+{"mode": "shared", "processes": 4, "baseline_mib": 513, "resident_mib": 1025, "delta_mib": 512, "broker_load_us": 536149.927, "workers": ["load_or_share_open_us 1058.26 sync_us 14.091", "load_or_share_open_us 507.581 sync_us 19.661", "load_or_share_open_us 674.118 sync_us 21.718", "load_or_share_open_us 1088.23 sync_us 14.985"]}
+close_us 172.972
+close_us 159.486
+close_us 163.242
+close_us 162.671

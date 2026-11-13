@@ -13,7 +13,7 @@ three trials.
 [Quickstart](docs/QUICKSTART.md) ·
 [Try on Colab](https://colab.research.google.com/github/yahiag04/gpumemd/blob/v0.18.1/notebooks/gpumemd_t4.ipynb) ·
 [C++ integration](docs/CPP_INTEGRATION.md) ·
-[Benchmark report](docs/benchmarks/2026-11-13-colab-t4/README.md) ·
+[Benchmark report](docs/benchmarks/2026-11-13-colab-t4-load-ab/README.md) ·
 [Download v0.18.1](https://github.com/yahiag04/gpumemd/releases/tag/v0.18.1)
 
 **Experimental · MIT licensed · Source distribution.**
@@ -54,12 +54,17 @@ Socket round-trip latency over 10,000 requests:
 
 | p50 | p95 | p99 |
 | ---: | ---: | ---: |
-| 112 µs | 165 µs | 220 µs |
+| 80 µs | 121 µs | 195 µs |
 
 Socket timings include connection setup and Python overhead. These measurements
 show memory sharing and broker latency, not inference throughput. See the
-[full report and raw logs](docs/benchmarks/2026-11-13-colab-t4/README.md)
+[latest report and raw logs](docs/benchmarks/2026-11-13-colab-t4-load-ab/README.md)
 for loading times, methodology, environment, and limitations.
+
+A **standalone pinned-memory loading experiment** reduced median loading time
+for 512 MiB from **538 ms to 108 ms (4.97×)** over five paired trials, with full
+readback verification. This pipeline is not yet integrated into the broker's
+loading path; it is not a 4.97× broker or inference speedup.
 
 ## Get started
 
@@ -153,16 +158,15 @@ parsing and inference execution are outside the project's scope.
 
 ## Validation
 
-The recorded T4 run passed **18/18 CTest checks**, including CUDA backend,
-CUDA IPC, server, and client tests. A separate acquire/release run in the same
-runtime verified capacity accounting, duplicate/oversized rejection, waiting,
-timeout, balanced byte counters, and zero final reservations.
+The latest T4 run at commit `2e922a4` passed **23/23 CTest checks**, including
+connection churn, CUDA backend checks, and cross-process payload readback.
+The combined notebook sequence also completed, including acquire/release
+validation and five paired pageable/pinned loading trials with verified data.
 
-The current suite also covers connection churn and CUDA host-side contracts
-with a stub runtime; these checks do not substitute for NVIDIA execution.
-The updated notebook combines previously separate checks; that combined sequence
-has not itself been rerun end to end on T4. See the
-[validation provenance](docs/benchmarks/2026-11-13-colab-t4/README.md#evidence-and-provenance).
+Two CUDA contract tests use a stub runtime to exercise deterministic host-side
+concurrency and failure cases; the real GPU tests are separate. These results
+do not establish exhaustive race freedom or production readiness. See the
+[latest validation report](docs/benchmarks/2026-11-13-colab-t4-load-ab/README.md).
 
 Run the standalone logical accounting check with:
 
@@ -174,8 +178,8 @@ python3 scripts/check_acquire_release.py --build build
 
 `main` fixes retention of completed server threads and premature publication of
 CUDA backend uploads. It also includes an experimental pageable/pinned loading
-comparison. These changes have local regression coverage; fresh NVIDIA
-validation and performance measurements are pending. The published v0.18.1
+comparison. These changes have local regression coverage and have now been
+compiled and exercised on the T4 at commit `2e922a4`. The published v0.18.1
 release and historical T4 measurements predate these fixes. See the
 [fixes, test evidence, and A/B procedure](docs/LOAD_EXPERIMENT.md).
 
@@ -186,7 +190,8 @@ release and historical T4 measurements predate these fixes. See the
 | [Quickstart](docs/QUICKSTART.md) | First CUDA run, demo, measurements, troubleshooting |
 | [C++ integration](docs/CPP_INTEGRATION.md) | Linking, device pointers, retention and cleanup |
 | [Command and benchmark reference](docs/REFERENCE.md) | Protocol semantics, scheduling, benchmark commands |
-| [T4 report](docs/benchmarks/2026-11-13-colab-t4/README.md) | Raw evidence, measurements, methodology and limits |
+| [Latest T4 report](docs/benchmarks/2026-11-13-colab-t4-load-ab/README.md) | 23-test validation, pinned loading A/B, and raw evidence |
+| [Initial T4 report](docs/benchmarks/2026-11-13-colab-t4/README.md) | Historical release measurements and methodology |
 | [Loading experiment](docs/LOAD_EXPERIMENT.md) | Post-release concurrency fixes and pageable/pinned A/B procedure |
 | [Release notes](docs/releases/v0.18.1.md) | Packaged features and experimental release scope |
 

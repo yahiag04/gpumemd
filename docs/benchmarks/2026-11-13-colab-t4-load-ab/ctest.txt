@@ -1,0 +1,52 @@
+Internal ctest changing into directory: /content/gpumemd/build-colab
+Test project /content/gpumemd/build-colab
+      Start  1: cuda_backend_contract
+ 1/23 Test  #1: cuda_backend_contract ............   Passed    0.00 sec
+      Start  2: cuda_load_contract
+ 2/23 Test  #2: cuda_load_contract ...............   Passed    0.00 sec
+      Start  3: resource_manager
+ 3/23 Test  #3: resource_manager .................   Passed    0.25 sec
+      Start  4: model_registry
+ 4/23 Test  #4: model_registry ...................   Passed    0.00 sec
+      Start  5: model_residency
+ 5/23 Test  #5: model_residency ..................   Passed    0.01 sec
+      Start  6: mock_backend
+ 6/23 Test  #6: mock_backend .....................   Passed    0.00 sec
+      Start  7: model_file
+ 7/23 Test  #7: model_file .......................   Passed    0.00 sec
+      Start  8: memory_allocator
+ 8/23 Test  #8: memory_allocator .................   Passed    0.00 sec
+      Start  9: device_placement
+ 9/23 Test  #9: device_placement .................   Passed    0.00 sec
+      Start 10: node_registry
+10/23 Test #10: node_registry ....................   Passed    0.00 sec
+      Start 11: client
+11/23 Test #11: client ...........................   Passed    0.11 sec
+      Start 12: cuda_backend
+12/23 Test #12: cuda_backend .....................   Passed    0.40 sec
+      Start 13: cuda_ipc
+13/23 Test #13: cuda_ipc .........................   Passed    0.53 sec
+      Start 14: protocol
+14/23 Test #14: protocol .........................   Passed    0.00 sec
+      Start 15: server
+15/23 Test #15: server ...........................   Passed    0.69 sec
+      Start 16: cli_framing
+16/23 Test #16: cli_framing ......................   Passed    0.81 sec
+      Start 17: cli_help
+17/23 Test #17: cli_help .........................   Passed    0.01 sec
+      Start 18: cli_no_arguments
+18/23 Test #18: cli_no_arguments .................   Passed    0.01 sec
+      Start 19: cli_unsupported_arguments
+19/23 Test #19: cli_unsupported_arguments ........   Passed    0.01 sec
+      Start 20: benchmark_unload
+20/23 Test #20: benchmark_unload .................   Passed    0.38 sec
+      Start 21: acquire_release
+21/23 Test #21: acquire_release ..................   Passed    0.64 sec
+      Start 22: server_churn
+22/23 Test #22: server_churn .....................   Passed    1.51 sec
+      Start 23: cli_client_help
+23/23 Test #23: cli_client_help ..................   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 23
+
+Total Test time (real) =   5.39 sec
