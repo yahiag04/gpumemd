@@ -25,6 +25,14 @@ def request(path, command):
         return result.decode()
 
 
+def unload_if_resident(path, model):
+    try:
+        request(path, 'unload ' + model)
+    except RuntimeError as error:
+        if not str(error).startswith('ERR unknown_residency '):
+            raise
+
+
 def read_line(worker):
     with selectors.DefaultSelector() as selector:
         selector.register(worker.stdout, selectors.EVENT_READ)
@@ -68,7 +76,7 @@ def main():
             '--format=csv,noheader,nounits'], text=True).strip())
     # Dedicated idle GPU required. Keep identical initialized worker contexts in both cases.
     for mode in ('independent', 'shared'):
-        request(args.socket, 'unload ' + args.model)
+        unload_if_resident(args.socket, args.model)
         workers = []
         retained = False
         try:

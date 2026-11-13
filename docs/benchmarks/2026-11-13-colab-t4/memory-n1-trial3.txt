@@ -1,0 +1,4 @@
+{"mode": "independent", "processes": 1, "baseline_mib": 207, "resident_mib": 719, "delta_mib": 512, "broker_load_us": null, "workers": ["load_or_share_open_us 619237 sync_us 20.082"]}
+close_us 459.749
+{"mode": "shared", "processes": 1, "baseline_mib": 207, "resident_mib": 719, "delta_mib": 512, "broker_load_us": 533837.107, "workers": ["load_or_share_open_us 560.74 sync_us 14.844"]}
+close_us 172.777

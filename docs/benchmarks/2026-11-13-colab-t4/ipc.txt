@@ -1,0 +1,3 @@
+OK opened bench 536870912 bytes
+OK cudaMemset
+OK closed_on_scope_exit

@@ -5,6 +5,9 @@
 #include "gpumemd/resource_manager.hpp"
 
 #include <cassert>
+#ifdef NDEBUG
+#error "Tests require assertions, including in Release builds"
+#endif
 #include <chrono>
 #include <cstdio>
 #include <fstream>

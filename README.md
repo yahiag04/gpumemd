@@ -4,7 +4,7 @@ A C++20 GPU resource and model-residency broker with optional NVIDIA CUDA
 and Apple Metal backends, plus a mock backend for hardware-independent use.
 It manages allocations and raw model-file residency; it does not run inference.
 
-**Current state: v0.18 implemented, with additional performance benchmarks.** CMake builds the daemon, the independent
+**Current state: v0.18 prototype, validated on NVIDIA T4 with CUDA IPC and multiprocess memory benchmarks.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
@@ -59,10 +59,11 @@ allocation and executing `cudaMemset` from a separate process.
   the node registry does not provide distributed transport or replication.
 - Locally verified: Release build and Metal cold/resident-load benchmarks on
   Apple M4, plus socket latency measurements over 10,000 requests.
-- NVIDIA validation pending: the CUDA multiprocess memory comparison and IPC
-  timing worker have been added but have not been compiled or run on NVIDIA
-  hardware in this development environment. No measured CUDA memory savings
-  or CUDA latency results are claimed here.
+- NVIDIA validated: Google Colab Tesla T4, CUDA 13.0, Release build, 18/18
+  CTest checks passed. Eight workers shared one 512 MiB allocation instead of
+  eight independent copies: 87.5% less incremental VRAM in three trials.
+  Separate acquire/release validation passed in the same T4 runtime.
+  See the [results and raw logs](docs/benchmarks/2026-11-13-colab-t4/README.md).
 - Not implemented: model-format parsing, inference kernels, multi-GPU routing,
   authentication, or persistent/distributed service operation.
 
@@ -281,3 +282,58 @@ explicit device synchronization, and close/free. Shared workers never mutate
 model data. Synchronization measures an idle-device barrier after synchronous
 loading, not cross-process producer/consumer synchronization. CUDA experiments
 require NVIDIA hardware and are not validated by a successful Metal run.
+
+## Google Colab / T4
+
+Upload [`notebooks/gpumemd_t4.ipynb`](notebooks/gpumemd_t4.ipynb) to Colab,
+select a T4 GPU runtime, and run the cells in order. The notebook asks for
+`gpumemd-colab-source.zip`, an archive with this repository's source files at
+its root (not inside an extra directory). To package a committed revision:
+
+```sh
+git archive --format=zip --output=gpumemd-colab-source.zip HEAD
+```
+
+The notebook builds Release with CUDA architecture 75, runs CTest and an IPC
+smoke test, then reuses the existing benchmarks: cold/resident load latency,
+10,000 socket calls, and independent/shared VRAM for 1/2/4/8 workers with three
+trials each. Defaults use a 512 MiB synthetic file. Download the results ZIP
+with raw logs and the memory comparison CSV before ending the runtime.
+These are memory-management measurements, not inference throughput. The
+[recorded T4 run](docs/benchmarks/2026-11-13-colab-t4/README.md) includes the
+Release assertion and benchmark unload corrections now included in this source.
+The acquire/release check was run separately in the same runtime; the notebook
+now includes that check before export.
+
+For explicit acquire/release validation against a separate daemon:
+
+```sh
+python3 scripts/check_acquire_release.py --build build
+```
+
+This checks logical accounting, duplicate/oversized requests, full-capacity
+`try_acquire`, timeout, a waiting client unblocked by release, balanced byte
+counters, and zero final reservations. A passing run reports seven acquire
+attempts (including four expected failures) and three releases. The Colab
+notebook saves this separately as `acquire-release.json`. These reservations
+do not allocate CUDA memory; T4 execution must be confirmed by the runtime's
+actual output, not inferred from the local check.
+
+## Measured T4 results
+
+512 MiB synthetic file, three trials per process count:
+
+| Processes | Independent VRAM delta | Shared VRAM delta | Reduction |
+| ---: | ---: | ---: | ---: |
+| 1 | 512 MiB | 512 MiB | 0% |
+| 2 | 1,024 MiB | 512 MiB | 50% |
+| 4 | 2,048 MiB | 512 MiB | 75% |
+| 8 | 4,096 MiB | 512 MiB | 87.5% |
+
+Socket round-trip p50/p95/p99: **112/165/220 microseconds**, 10,000 samples.
+These deltas exclude the initialized-context baseline; at eight workers total
+observed GPU usage was 5,017 MiB independent versus 1,433 MiB shared (71.4% less).
+The project manages raw bytes and logical reservations; it does not execute
+inference. Crash recovery, security hardening, and long-running load validation
+remain outside the demonstrated prototype scope. See the
+[methodology, limitations, and evidence](docs/benchmarks/2026-11-13-colab-t4/README.md).

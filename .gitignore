@@ -5,3 +5,7 @@
 /compile_commands.json
 .DS_Store
 *.swp
+
+__pycache__/
+*.py[cod]
+/gpumemd-colab-source.zip

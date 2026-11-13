@@ -1,0 +1,11 @@
+OK metrics
+requests 11121
+successes 11098
+failures 23
+acquires 0
+releases 0
+model_loads 11014
+model_unloads 13
+acquired_bytes 0
+released_bytes 0
+END

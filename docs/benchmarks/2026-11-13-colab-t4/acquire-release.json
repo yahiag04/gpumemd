@@ -1,0 +1,26 @@
+{
+  "result": "PASS",
+  "checks": [
+    "acquire_and_accounting",
+    "duplicate_rejected",
+    "oversized_rejected",
+    "try_acquire_full",
+    "timeout",
+    "waiter_unblocked_by_release",
+    "zero_final_reservations",
+    "balanced_byte_counters"
+  ],
+  "observed_timeout_ms": 202.04294800009848,
+  "metrics": {
+    "requests": 12,
+    "successes": 8,
+    "failures": 4,
+    "acquires": 7,
+    "releases": 3,
+    "model_loads": 0,
+    "model_unloads": 0,
+    "acquired_bytes": 1207959552,
+    "released_bytes": 1207959552
+  },
+  "final_status": "OK status 1073741824 0 1073741824 0\nEND\n"
+}

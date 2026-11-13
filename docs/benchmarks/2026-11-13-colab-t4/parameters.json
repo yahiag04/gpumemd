@@ -1,0 +1,11 @@
+{
+  "size_mib": 512,
+  "processes": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "trials": 3,
+  "cold_iterations": 20
+}

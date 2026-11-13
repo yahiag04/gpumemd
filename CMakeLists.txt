@@ -250,6 +250,17 @@ if(BUILD_TESTING)
         set_tests_properties(cli_${scenario} PROPERTIES TIMEOUT 5)
     endforeach()
 
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME benchmark_unload
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmark_test.py"
+                $<TARGET_FILE:gpumemd>)
+        add_test(NAME acquire_release
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_acquire_release.py"
+                --build $<TARGET_FILE_DIR:gpumemd>)
+        set_tests_properties(benchmark_unload acquire_release PROPERTIES TIMEOUT 30)
+    endif()
+
     add_test(NAME cli_client_help
         COMMAND "${CMAKE_COMMAND}"
             "-DGPUMEMCTL=$<TARGET_FILE:gpumemctl>"
@@ -257,6 +268,15 @@ if(BUILD_TESTING)
             -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_smoke.cmake"
     )
     set_tests_properties(cli_client_help PROPERTIES TIMEOUT 5)
+
+    # Tests use assert for checks and setup calls; keep them active in Release.
+    # Apply only to test executables, leaving production optimization unchanged.
+    get_property(test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(target IN LISTS test_targets)
+        if(target MATCHES "_test$")
+            target_compile_options(${target} PRIVATE -UNDEBUG)
+        endif()
+    endforeach()
 endif()
 
 if(CMAKE_CUDA_COMPILER)
