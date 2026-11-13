@@ -4,7 +4,7 @@ A C++20 GPU resource and model-residency broker with optional NVIDIA CUDA
 and Apple Metal backends, plus a mock backend for hardware-independent use.
 It manages allocations and raw model-file residency; it does not run inference.
 
-**Current state: v0.18 prototype, validated on NVIDIA T4 with CUDA IPC and multiprocess memory benchmarks.** CMake builds the daemon, the independent
+**Current state: v0.18.1 experimental release, validated on NVIDIA T4 with CUDA IPC and multiprocess memory benchmarks.** CMake builds the daemon, the independent
 `ResourceManager`, `ModelRegistry`, and `ModelResidencyManager` cores, the
 text-command parser, and `gpumemctl`. CTest covers accounting, waiting queues,
 priorities, timeouts, model lifecycle and concurrency, LRU eviction, parsing,
@@ -44,6 +44,18 @@ The v0.17 CUDA client wrapper combines the `share` request with
 RAII when the wrapper is destroyed.
 The v0.18 CUDA demo performs an end-to-end IPC check by importing a resident
 allocation and executing `cudaMemset` from a separate process.
+
+## Try it / use it
+
+**Experimental source release:** [v0.18.1](https://github.com/yahiag04/gpumemd/releases/tag/v0.18.1).
+Start with the [Linux/CUDA quickstart](docs/QUICKSTART.md), or
+[open the T4 notebook in Colab](https://colab.research.google.com/github/yahiag04/gpumemd/blob/v0.18.1/notebooks/gpumemd_t4.ipynb).
+Upload the release's `gpumemd-colab-source.zip` asset when the notebook requests sources.
+
+For application developers, the [C++ integration guide](docs/CPP_INTEGRATION.md)
+explains linking, imported pointer lifetime, and coordinator-side retention.
+The release provides source code, not prebuilt binaries. Use trusted local
+clients; API stability and production fault recovery are not guaranteed.
 
 ## Implementation and validation status
 
