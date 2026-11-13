@@ -349,3 +349,7 @@ The project manages raw bytes and logical reservations; it does not execute
 inference. Crash recovery, security hardening, and long-running load validation
 remain outside the demonstrated prototype scope. See the
 [methodology, limitations, and evidence](docs/benchmarks/2026-11-13-colab-t4/README.md).
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Yahia Ghallale.
