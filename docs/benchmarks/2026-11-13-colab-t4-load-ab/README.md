@@ -1,5 +1,8 @@
 # T4 validation: concurrency fixes and pinned loading experiment
 
+For current checkout identifiers corresponding to the original exported revisions,
+see the [revision table](../REVISIONS.md). Raw provenance files are preserved.
+
 Run supplied by the user on 2026-11-13, exported as
 `gpumemd-results-ax4sjvpx`. `SOURCE_REVISION.txt` identifies commit
 `2e922a4ea678cfa8167573edf67e8f5249277d03` exactly. Raw files were copied from

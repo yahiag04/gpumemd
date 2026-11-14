@@ -1,7 +1,8 @@
 # Loading experiment and concurrency fixes after v0.18.1
 
-The historical T4 results remain unchanged. The changes described here are on
-`main`, after the v0.18.1 tag. A subsequent run at commit `2e922a4` compiled and
+The historical T4 results remain unchanged. Exported revision identifiers are
+mapped to the current history in [this table](benchmarks/REVISIONS.md). The changes described here are on
+`main`, after the v0.18.1 tag. A subsequent run at commit `98e44c9` compiled and
 exercised the changes on NVIDIA T4: **23/23 CTest checks passed**, and the
 standalone pinned pipeline reduced median 512 MiB load time from **538.266 ms
 to 108.230 ms (4.973×)** over five paired trials with full readback verification.

@@ -1,5 +1,8 @@
 # NVIDIA T4 validation — 2026-11-13
 
+For current checkout identifiers corresponding to the original exported revisions,
+see the [revision table](../REVISIONS.md). Raw provenance files are preserved.
+
 This run validates the v0.18 prototype's CUDA memory sharing and, in a separate
 process, logical acquire/release behavior. It does not measure inference.
 

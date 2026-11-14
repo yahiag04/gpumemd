@@ -158,7 +158,7 @@ parsing and inference execution are outside the project's scope.
 
 ## Validation
 
-The latest T4 run at commit `2e922a4` passed **23/23 CTest checks**, including
+The latest T4 run at commit `98e44c9` passed **23/23 CTest checks**, including
 connection churn, CUDA backend checks, and cross-process payload readback.
 The combined notebook sequence also completed, including acquire/release
 validation and five paired pageable/pinned loading trials with verified data.
@@ -179,7 +179,7 @@ python3 scripts/check_acquire_release.py --build build
 `main` fixes retention of completed server threads and premature publication of
 CUDA backend uploads. It also includes an experimental pageable/pinned loading
 comparison. These changes have local regression coverage and have now been
-compiled and exercised on the T4 at commit `2e922a4`. The published v0.18.1
+compiled and exercised on the T4 at commit `98e44c9`. The published v0.18.1
 release and historical T4 measurements predate these fixes. See the
 [fixes, test evidence, and A/B procedure](docs/LOAD_EXPERIMENT.md).
 
